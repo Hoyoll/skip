@@ -1446,22 +1446,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "skip"
-version = "0.0.1"
-
-[[package]]
-name = "skip-core"
-version = "0.1.0"
-
-[[package]]
-name = "skip-skia"
+name = "skia-skip"
 version = "0.0.1"
 dependencies = [
  "gl",
  "glutin",
  "raw-window-handle",
  "skia-safe",
- "skip-core",
  "winit",
 ]
 
