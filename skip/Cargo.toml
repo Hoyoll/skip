@@ -1,5 +1,5 @@
 [package]
-name = "skip-core"
+name = "skip"
 version = "0.1.0"
 edition = "2024"
 

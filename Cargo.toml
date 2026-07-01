@@ -1,11 +1,11 @@
 [package]
-name = "skip"
+name = "skip-project"
 version = "0.0.1"
 edition = "2024"
 
 [workspace]
 resolver = "3"
-members = ["skip-skia", "skip-core"]
+members = ["skip-skia", "skip"]
 
 [workspace.dependencies]
-skip-core = { path = "skip-core"}
+skip = { path = "skip"}
