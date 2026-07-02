@@ -23,11 +23,13 @@ pub struct Text<'skip, R: Renderer> {
 
 pub struct TextW<'skip> {
     pub text: &'skip str,
-    pub font_id: usize,
+    pub font_id: Font,
     pub size: usize,
     pub color: Color,
     pub pos: Vec2<f32>,
 }
+
+pub type Font = usize;
 
 pub struct Div<R> {
     widget: DivW,
@@ -42,9 +44,76 @@ pub struct DivW {
  
 }
 
+pub struct Child<R> {
+    pos: Vec2<f32>,
+    renderer: R,
+}
+
+impl<'skip> From<()> for TextW<'skip> {
+   fn from(_value: ()) -> Self {
+       Self { text: "", font_id: 0, size: 0, color: ().into(), pos: ().into() }
+   } 
+}
+
+
+impl<'skip> From<(&'skip str)> for TextW<'skip> {
+   fn from(value: (&'skip str)) -> Self {
+       Self { text: value.into(), font_id: 0, size: 0, color: ().into(), pos: ().into() }
+   } 
+}
+
+impl<'skip, Pos: Into<Vec2<f32>>> From<(&'skip str, Pos)> for TextW<'skip> {
+   fn from(value: (&'skip str, Pos)) -> Self {
+        Self { text: value.0.into(), font_id: 0, size: 0, color: ().into(), pos: value.1.into() }
+   
+    } 
+}
+
+impl<'skip> From<(&'skip str, Font, usize)> for TextW<'skip> {
+    fn from(value: (&'skip str, Font, usize)) -> Self {
+        Self { text: value.0, font_id: value.1, size: value.2, color: ().into(), pos: ().into() }
+    }
+}
+
+
+impl<'skip, Col: Into<Color>, Pos: Into<Vec2<f32>>> From<(&'skip str, Font, usize, Col, Pos)> for TextW<'skip> {
+   fn from(value: (&'skip str, Font, usize, Col, Pos)) -> Self {
+        Self { text: value.0, font_id:value.1, size: value.2, color: value.3.into(), pos: value.4.into() }
+   } 
+}
+
+impl From<()> for DivW  {
+    fn from(_value: ()) -> Self {
+        Self { 
+            dim: ().into(), 
+            rad: 0.0, 
+            color: ().into(), 
+            pos: ().into() }        
+    }
+}
+
+
+impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>> From<(Dim, Pos)> for DivW  {
+    fn from(value: (Dim, Pos)) -> Self {
+        Self { dim: value.0.into(), rad: 0.0, color: ().into(), pos: value.1.into() }
+    }
+}
+
+impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>, Col: Into<Color>> From<(Dim, Pos, f32, Col)> for DivW {
+    fn from(value: (Dim, Pos, f32, Col)) -> Self {
+        Self { dim: value.0.into(), rad: value.2, color: value.3.into(), pos: value.1.into() }
+    }
+}
+
 impl<T> From<(T,T)> for Vec2<T> {
    fn from(value: (T,T)) -> Self {
         Self { x: value.0, y: value.1 }
+    } 
+}
+
+impl<T: Default> From<()> for Vec2<T> {
+   fn from(_value: ()) -> Self {
+        Self { x: T::default(), y: T::default() }
     } 
 }
 
@@ -54,15 +123,22 @@ impl From<(u8, u8, u8, u8)> for Color {
     }
 }
 
+impl From<()> for Color {
+    fn from(_value: ()) -> Self {
+        Self { r: 0, g: 0, b: 0, a: 0 }
+    }
+}
+
 impl<'skip,R: Renderer> Div<R> {
-    pub fn new(renderer: R) -> Self {
+    pub fn new<Div: Into<DivW>>(widget: Div, renderer: R) -> Self {
         Self { 
-            widget: DivW {
-                dim: (0.0, 0.0).into(), 
-                rad: 0.0, 
-                color: (0,0,0,0).into(),
-                pos: (0.0, 0.0).into()
-        }, renderer }
+            widget: widget.into(),
+            renderer 
+        }
+    }
+
+    pub fn turn<Div: Into<DivW>>(self, widget: Div) -> Self {
+        Self { widget: widget.into(), renderer: self.renderer }
     }
 
     pub fn pos<V: Into<Vec2<f32>>>(mut self,pos: V) -> Self {
@@ -75,15 +151,9 @@ impl<'skip,R: Renderer> Div<R> {
         self.widget.dim = dim.into();
         self
     }
-    pub fn to_text(self, text: &'skip str) -> Text<'skip, R> {
+    pub fn to_text<T: Into<TextW<'skip>>>(self, text: T) -> Text<'skip, R> {
         Text { 
-            widget: TextW { 
-                text, 
-                font_id: 0, 
-                size: 0, 
-                color: self.widget.color,
-                pos: Vec2 { x: 0.0, y: 0.0 }
-            }, 
+            widget: text.into(), 
             renderer: self.renderer }
     }
     pub fn color<C: Into<Color>>(mut self, color: C) -> Self {
@@ -111,23 +181,26 @@ impl<'skip,R: Renderer> Div<R> {
         p.consume(self)
     }
 
-
+    pub fn children<F: FnMut(Child<R>) -> O, O: Widget<'skip, R>>(mut self, mut f: F) -> Self {
+        let w = f(Child { pos: (self.widget.pos.x, self.widget.pos.y).into(), renderer: self.renderer });
+        self.renderer = w.renderer();
+        self
+    }
 }
 
 impl<'skip, R: Renderer> Text<'skip, R> {
 
-    pub fn new(renderer: R, text: &'skip str) -> Self {
+    pub fn new<T: Into<TextW<'skip>>>(text: T,renderer: R) -> Self {
        Self {
-           widget: TextW {
-                text,
-                font_id: 0,
-                color: (0,0,0,0).into(),
-                size: 0,
-                pos: Vec2 { x: 0.0, y: 0.0 }
-           },
+           widget: text.into(),
            renderer
        } 
     }
+
+    pub fn turn<T: Into<TextW<'skip>>>(self, widget: T) -> Self {
+        Self { widget: widget.into(), renderer: self.renderer }
+    }
+
 
     pub fn pos<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
         self.widget.pos = pos.into();
@@ -139,14 +212,9 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self
     }
 
-    pub fn to_div<V: Into<Vec2<f32>>>(self, dim: V) -> Div<R> {
+    pub fn to_div<V: Into<DivW>>(self, dim: V) -> Div<R> {
         Div {
-            widget: DivW {
-                dim: dim.into(),
-                pos: (0.0, 0.0).into(),
-                rad: 0.0, 
-                color: (0,0,0,0).into()
-            }, 
+            widget: dim.into(), 
             renderer: self.renderer }
     }
 
@@ -186,6 +254,20 @@ impl<'skip, R: Renderer> Text<'skip, R> {
 
 }
 
+impl<R: Renderer> Child<R> {
+    pub fn text<'skip,F: FnMut(Text<'skip, R>) -> O, O: Widget<'skip, R>>(mut self, mut f: F) -> Self {
+        let o = f(Text { widget: ("", (self.pos.x, self.pos.y)).into(), renderer: self.renderer });
+        self.renderer = o.renderer();
+        self
+    }
+
+    pub fn div<'skip,F: FnMut(Div<R>) -> O, O: Widget<'skip, R>>(mut self, mut f: F) -> Self {
+        let o = f(Div { widget: ((), (self.pos.x, self.pos.y)).into(),renderer: self.renderer});
+        self.renderer = o.renderer();
+        self
+    }
+}
+
 pub trait Renderer {
     fn render_text<'skip>(&mut self, text: &TextW<'skip>);
     fn render_div(&mut self, div: &DivW);
@@ -195,11 +277,27 @@ pub trait Renderer {
     fn key_text<'skip, F: FnMut(&mut TextW<'skip>, &Key)>(&mut self,text: &mut TextW<'skip>, f: F);
 }
 
-pub trait Widget<'skip, R: Renderer> {}
+pub(crate) trait Widget<'skip, R: Renderer> {
+    fn renderer(self) -> R;
+}
 
-impl<'skip, R: Renderer> Widget<'skip, R>  for Div<R> {}
+impl<'skip, R: Renderer> Widget<'skip, R>  for Div<R> {
+    fn renderer(self) -> R {
+        self.renderer
+    }
+}
 
-impl<'skip, R: Renderer> Widget<'skip, R>  for Text<'skip,R> {}
+impl<'skip, R: Renderer> Widget<'skip, R>  for Text<'skip,R> {
+    fn renderer(self) -> R {
+        self.renderer
+    }
+}
+
+impl<'skip, R: Renderer> Widget<'skip, R> for Child<R> {
+    fn renderer(self) -> R {
+        self.renderer
+    }
+}
 
 pub trait Proc<'skip, In: Widget<'skip, R>, Out: Widget<'skip, R>, R: Renderer> {
     fn consume(&mut self, widget: In) -> Out;

@@ -235,7 +235,7 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                     window.on.push(state);
                 }
                 winit::event::WindowEvent::RedrawRequested => {
-                    match self.app.draw(window_id, skip::Div::new(window), &self.proxy) {
+                    match self.app.draw(window_id, skip::Div::new((),window), &self.proxy) {
                         Control::Kill => {
                            self.windows.remove(&window_id); 
                         }
@@ -400,7 +400,12 @@ impl AppController<Cool> for App {
                 
             })
             .render()
-                .to_text("Hello!")
+                .children(|c| {
+                    c.text(|t| {
+                        t
+                    })
+                })
+                .to_text(("Hello!", 0, 1))
                 .on(|text, on| {
                     match on {
                         skip::On::Hover(_) => {
