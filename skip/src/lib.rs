@@ -1,14 +1,3 @@
-pub struct Vec2<T> {
-    pub x: T,
-    pub y: T,
-}
-
-impl<T> Vec2<T> {
-    pub fn new(x: T, y: T) -> Self {
-        Self { x, y }
-    }
-}
-
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -44,88 +33,83 @@ pub struct DivW {
  
 }
 
-pub struct Child<R> {
+pub struct Horizontal<R: Renderer> {
+    y_anchor: f32,
+    x_offset: f32,
+    dim: Vec2<f32>,
+    gap: f32,
+    renderer: R,
+}
+
+pub struct Vertical<R: Renderer> {
+    x_anchor: f32,
+    y_offset: f32,
+    dim: Vec2<f32>,
+    gap: f32,
+    renderer: R,
+}
+
+pub struct Point<R: Renderer> {
     pos: Vec2<f32>,
     renderer: R,
 }
 
-impl<'skip> From<()> for TextW<'skip> {
-   fn from(_value: ()) -> Self {
-       Self { text: "", font_id: 0, size: 0, color: ().into(), pos: ().into() }
-   } 
-}
+impl<'skip, R: Renderer> Point<R> {
+    pub fn div(self) -> Div<R> {
+        Div { 
+            widget: ((), self.pos).into(),
+            renderer: self.renderer 
+        }
+    }
 
-
-impl<'skip> From<(&'skip str)> for TextW<'skip> {
-   fn from(value: (&'skip str)) -> Self {
-       Self { text: value.into(), font_id: 0, size: 0, color: ().into(), pos: ().into() }
-   } 
-}
-
-impl<'skip, Pos: Into<Vec2<f32>>> From<(&'skip str, Pos)> for TextW<'skip> {
-   fn from(value: (&'skip str, Pos)) -> Self {
-        Self { text: value.0.into(), font_id: 0, size: 0, color: ().into(), pos: value.1.into() }
-   
-    } 
-}
-
-impl<'skip> From<(&'skip str, Font, usize)> for TextW<'skip> {
-    fn from(value: (&'skip str, Font, usize)) -> Self {
-        Self { text: value.0, font_id: value.1, size: value.2, color: ().into(), pos: ().into() }
+    pub fn text(self) -> Text<'skip, R> {
+        let mut text_w: TextW<'skip> = ().into();
+        text_w.pos = self.pos;
+        Text { widget: text_w, renderer: self.renderer }
     }
 }
 
+impl<'skip, R: Renderer> Horizontal<R> {
+    pub fn add<F: FnMut(Point<R>) -> W, W: Widget<'skip, R>>(mut self, mut f: F) -> Self {
+        self.x_offset += self.gap;
+        let w = f(Point { pos: (self.x_offset, self.y_anchor).into(), renderer: self.renderer });
+        let size = w.size();
+        self.x_offset += size.x;
+        self.renderer = w.renderer();
+        self
+    }
 
-impl<'skip, Col: Into<Color>, Pos: Into<Vec2<f32>>> From<(&'skip str, Font, usize, Col, Pos)> for TextW<'skip> {
-   fn from(value: (&'skip str, Font, usize, Col, Pos)) -> Self {
-        Self { text: value.0, font_id:value.1, size: value.2, color: value.3.into(), pos: value.4.into() }
-   } 
-}
+    pub fn gap(mut self, gap: f32) -> Self {
+        Self { y_anchor: self.y_anchor, x_offset: self.x_offset,dim: self.dim, gap, renderer: self.renderer }
+    }
 
-impl From<()> for DivW  {
-    fn from(_value: ()) -> Self {
-        Self { 
-            dim: ().into(), 
-            rad: 0.0, 
-            color: ().into(), 
-            pos: ().into() }        
+    pub fn padding<V: Into<Vec2<f32>>>(mut self, v: V) -> Self {
+        let pad = v.into();
+        self.y_anchor += pad.y;
+        self.x_offset += pad.x;
+        self
     }
 }
 
-
-impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>> From<(Dim, Pos)> for DivW  {
-    fn from(value: (Dim, Pos)) -> Self {
-        Self { dim: value.0.into(), rad: 0.0, color: ().into(), pos: value.1.into() }
+impl<'skip,R: Renderer> Vertical<R> {
+    pub fn add<F: FnMut(Point<R>) -> W, W: Widget<'skip, R>>(mut self, mut f: F) -> Self {
+        self.y_offset += self.gap;
+        let w = f(Point { pos: (self.x_anchor, self.y_offset).into(), renderer: self.renderer });
+        let size = w.size();
+        self.y_offset += size.y;
+        self.renderer = w.renderer();
+        self
     }
-}
-
-impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>, Col: Into<Color>> From<(Dim, Pos, f32, Col)> for DivW {
-    fn from(value: (Dim, Pos, f32, Col)) -> Self {
-        Self { dim: value.0.into(), rad: value.2, color: value.3.into(), pos: value.1.into() }
+    
+    pub fn gap(mut self, gap: f32) -> Self {
+        Self { x_anchor: self.x_anchor, y_offset: self.y_offset,dim: self.dim, gap, renderer: self.renderer }
     }
-}
 
-impl<T> From<(T,T)> for Vec2<T> {
-   fn from(value: (T,T)) -> Self {
-        Self { x: value.0, y: value.1 }
-    } 
-}
-
-impl<T: Default> From<()> for Vec2<T> {
-   fn from(_value: ()) -> Self {
-        Self { x: T::default(), y: T::default() }
-    } 
-}
-
-impl From<(u8, u8, u8, u8)> for Color {
-    fn from(value: (u8, u8, u8, u8)) -> Self {
-        Self { r: value.0, g: value.1, b: value.2, a: value.3 }
-    }
-}
-
-impl From<()> for Color {
-    fn from(_value: ()) -> Self {
-        Self { r: 0, g: 0, b: 0, a: 0 }
+    pub fn padding<V: Into<Vec2<f32>>>(mut self, v: V) -> Self {
+        let pad = v.into();
+        self.x_anchor += pad.x;
+        self.y_offset += pad.y;
+        self
     }
 }
 
@@ -181,15 +165,28 @@ impl<'skip,R: Renderer> Div<R> {
         p.consume(self)
     }
 
-    pub fn children<F: FnMut(Child<R>) -> O, O: Widget<'skip, R>>(mut self, mut f: F) -> Self {
-        let w = f(Child { pos: (self.widget.pos.x, self.widget.pos.y).into(), renderer: self.renderer });
+    pub fn horizontal<F: FnMut(Horizontal<R>) -> W, W:Widget<'skip,R>>(mut self, mut f: F) -> Self {
+        let w = f(Horizontal { y_anchor: self.widget.pos.y, x_offset: self.widget.pos.x,dim: (&self.widget.dim).into(), gap: 0.0, renderer: self.renderer });
         self.renderer = w.renderer();
+        self
+    }
+
+    pub fn vertical<F: FnMut(Vertical<R>) -> W, W:Widget<'skip,R>>(mut self, mut f: F) -> Self {
+        let w = f(Vertical { x_anchor: self.widget.pos.x, y_offset: self.widget.pos.y, dim: (&self.widget.dim).into(), gap: 0.0, renderer: self.renderer });
+        self.renderer = w.renderer();
+        self
+    }
+
+    pub fn clip<F: FnMut(Point<R>) -> W, W: Widget<'skip,R>>(mut self, mut f: F) -> Self {
+        self.renderer.start_clip(&self.widget);
+        let w = f(Point { pos: (&self.widget.pos).into(), renderer: self.renderer }); 
+        self.renderer = w.renderer();
+        self.renderer.end_clip();    
         self
     }
 }
 
 impl<'skip, R: Renderer> Text<'skip, R> {
-
     pub fn new<T: Into<TextW<'skip>>>(text: T,renderer: R) -> Self {
        Self {
            widget: text.into(),
@@ -254,20 +251,6 @@ impl<'skip, R: Renderer> Text<'skip, R> {
 
 }
 
-impl<R: Renderer> Child<R> {
-    pub fn text<'skip,F: FnMut(Text<'skip, R>) -> O, O: Widget<'skip, R>>(mut self, mut f: F) -> Self {
-        let o = f(Text { widget: ("", (self.pos.x, self.pos.y)).into(), renderer: self.renderer });
-        self.renderer = o.renderer();
-        self
-    }
-
-    pub fn div<'skip,F: FnMut(Div<R>) -> O, O: Widget<'skip, R>>(mut self, mut f: F) -> Self {
-        let o = f(Div { widget: ((), (self.pos.x, self.pos.y)).into(),renderer: self.renderer});
-        self.renderer = o.renderer();
-        self
-    }
-}
-
 pub trait Renderer {
     fn render_text<'skip>(&mut self, text: &TextW<'skip>);
     fn render_div(&mut self, div: &DivW);
@@ -275,27 +258,62 @@ pub trait Renderer {
     fn on_div<F: FnMut(&mut DivW, &On)>(&mut self,div: &mut DivW, f: F);
     fn key_div<F: FnMut(&mut DivW, &Key)>(&mut self,div: &mut DivW, f: F);
     fn key_text<'skip, F: FnMut(&mut TextW<'skip>, &Key)>(&mut self,text: &mut TextW<'skip>, f: F);
+    fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
+    fn start_clip(&mut self, dim: &DivW);
+    fn end_clip(&mut self);
 }
 
 pub(crate) trait Widget<'skip, R: Renderer> {
     fn renderer(self) -> R;
+    fn size(&self) -> Vec2<f32>; 
+}
+
+impl<'skip, R: Renderer> Widget<'skip, R> for Point<R> {
+    fn renderer(self) -> R {
+        self.renderer
+    }
+    fn size(&self) -> Vec2<f32> {
+        ().into()
+    }
+}
+
+impl<'skip,R: Renderer> Widget<'skip, R> for Horizontal<R> {
+   fn renderer(self) -> R {
+       self.renderer
+   } 
+   fn size(&self) -> Vec2<f32> {
+       (&self.dim).into()
+   }
+}
+
+
+impl<'skip,R: Renderer> Widget<'skip, R> for Vertical<R> {
+   fn renderer(self) -> R {
+       self.renderer
+   } 
+   fn size(&self) -> Vec2<f32> {
+       (&self.dim).into()
+   }
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R>  for Div<R> {
     fn renderer(self) -> R {
         self.renderer
     }
+
+    fn size(&self) -> Vec2<f32> {
+        (self.widget.dim.x, self.widget.dim.y).into()
+    }
+
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R>  for Text<'skip,R> {
     fn renderer(self) -> R {
         self.renderer
     }
-}
 
-impl<'skip, R: Renderer> Widget<'skip, R> for Child<R> {
-    fn renderer(self) -> R {
-        self.renderer
+    fn size(&self) -> Vec2<f32> {
+        self.renderer.text_size(&self.widget)
     }
 }
 
@@ -320,3 +338,103 @@ pub enum Key {
     Press(&'static str),
     Release(&'static str)
 }
+
+
+pub struct Vec2<T> {
+    pub x: T,
+    pub y: T,
+}
+
+impl<T> Vec2<T> {
+    pub fn new(x: T, y: T) -> Self {
+        Self { x, y }
+    }
+}
+
+impl<'skip> From<()> for TextW<'skip> {
+   fn from(_value: ()) -> Self {
+       Self { text: "", font_id: 0, size: 0, color: ().into(), pos: ().into() }
+   } 
+}
+
+
+impl<'skip> From<(&'skip str)> for TextW<'skip> {
+   fn from(value: (&'skip str)) -> Self {
+       Self { text: value.into(), font_id: 0, size: 0, color: ().into(), pos: ().into() }
+   } 
+}
+
+impl<'skip, Pos: Into<Vec2<f32>>> From<(&'skip str, Pos)> for TextW<'skip> {
+   fn from(value: (&'skip str, Pos)) -> Self {
+        Self { text: value.0.into(), font_id: 0, size: 0, color: ().into(), pos: value.1.into() }
+   
+    } 
+}
+
+impl<'skip> From<(&'skip str, Font, usize)> for TextW<'skip> {
+    fn from(value: (&'skip str, Font, usize)) -> Self {
+        Self { text: value.0, font_id: value.1, size: value.2, color: ().into(), pos: ().into() }
+    }
+}
+
+
+impl<'skip, Col: Into<Color>, Pos: Into<Vec2<f32>>> From<(&'skip str, Font, usize, Col, Pos)> for TextW<'skip> {
+   fn from(value: (&'skip str, Font, usize, Col, Pos)) -> Self {
+        Self { text: value.0, font_id:value.1, size: value.2, color: value.3.into(), pos: value.4.into() }
+   } 
+}
+
+impl From<()> for DivW  {
+    fn from(_value: ()) -> Self {
+        Self { 
+            dim: ().into(), 
+            rad: 0.0, 
+            color: ().into(), 
+            pos: ().into() }        
+    }
+}
+
+
+impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>> From<(Dim, Pos)> for DivW  {
+    fn from(value: (Dim, Pos)) -> Self {
+        Self { dim: value.0.into(), rad: 0.0, color: ().into(), pos: value.1.into() }
+    }
+}
+
+impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>, Col: Into<Color>> From<(Dim, Pos, f32, Col)> for DivW {
+    fn from(value: (Dim, Pos, f32, Col)) -> Self {
+        Self { dim: value.0.into(), rad: value.2, color: value.3.into(), pos: value.1.into() }
+    }
+}
+
+impl<T> From<(T,T)> for Vec2<T> {
+   fn from(value: (T,T)) -> Self {
+        Self { x: value.0, y: value.1 }
+    } 
+}
+
+impl<T: Copy> From<(&Vec2<T>)> for Vec2<T> {
+    fn from(value: (&Vec2<T>)) -> Self {
+        Self { x: value.x, y: value.y }
+    }
+}
+
+impl<T: Default> From<()> for Vec2<T> {
+   fn from(_value: ()) -> Self {
+        Self { x: T::default(), y: T::default() }
+    } 
+}
+
+impl From<(u8, u8, u8, u8)> for Color {
+    fn from(value: (u8, u8, u8, u8)) -> Self {
+        Self { r: value.0, g: value.1, b: value.2, a: value.3 }
+    }
+}
+
+impl From<()> for Color {
+    fn from(_value: ()) -> Self {
+        Self { r: 0, g: 0, b: 0, a: 0 }
+    }
+}
+
+

@@ -1,10 +1,11 @@
 use std::{collections::HashMap, ffi::CString, num::NonZeroU32};
 
-use glutin::{context::NotCurrentGlContext, display::{GetGlDisplay, GlDisplay}};
+use glutin::{context::NotCurrentGlContext, display::{GetGlDisplay, GlDisplay}, surface::GlSurface};
 use raw_window_handle::HasWindowHandle;
 
 pub enum Control {
     Redraw,
+    Suspend,
     Kill,
 }
 
@@ -19,50 +20,57 @@ pub trait AppController<T: UserEvent> {
     fn draw(
         &mut self, 
         on: winit::window::WindowId, 
-        ui: skip::Div<&mut Window>, 
+        ui: skip::Div<&mut Canvas>, 
         proxy: &winit::event_loop::EventLoopProxy<T>
     ) -> Control;
 }
 
 struct Window {
-    pub on: Vec<skip::On>,
-    pub window_dim: skip::Vec2<f32>,
-    pub mouse_pos: skip::Vec2<f32>,
-    pub key: Vec<skip::Key>,
-    pub window: winit::window::Window,
+    on: Vec<skip::On>,
+    mouse_pos: skip::Vec2<f32>,
+    key: Vec<skip::Key>,
+    window: winit::window::Window,
+    surface: skia_safe::Surface,
+    dr_context: skia_safe::gpu::DirectContext,
+    skia_context: glutin::context::PossiblyCurrentContext,
+    fb_info: skia_safe::gpu::gl::FramebufferInfo,
+    gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
 }
 
-impl skip::Renderer for &mut Window {
-    fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>) {
-        
-    }
+struct Canvas<'skip> {
+    on: &'skip Vec<skip::On>,
+    mouse_pos: &'skip skip::Vec2<f32>,
+    key: &'skip Vec<skip::Key>,
+    canvas: &'skip skia_safe::Canvas
+}
+
+impl<'a> skip::Renderer for &mut Canvas<'a> {
     fn render_div(&mut self, div: &skip::DivW) {
         
     }
-    fn on_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::On)>(&mut self,text: &mut skip::TextW<'skip>, mut f: F) {
-        for on in &self.on {
-           f(text, on); 
-       }
+    fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
+        ().into()
     }
-    fn on_div<F: FnMut(&mut skip::DivW, &skip::On)>(&mut self,div: &mut skip::DivW, mut f: F) {
-        let limit_x = div.pos.x + div.dim.x;
-        let limit_y = div.pos.y + div.dim.y;
-        if (self.mouse_pos.x >= div.pos.x && self.mouse_pos.x >= limit_x) && (self.mouse_pos.y >= div.pos.y && self.mouse_pos.y >= limit_y)  {
-            f(div, &skip::On::Hover(skip::Vec2::new(self.mouse_pos.x, self.mouse_pos.y)));
-            for on in &self.on {
-                f(div, on);
-            }
-        } 
+    fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>) {
+        
     }
-    fn key_div<F: FnMut(&mut skip::DivW, &skip::Key)>(&mut self,div: &mut skip::DivW, mut f: F) {
-       for key in &self.key {
-            f(div, key);
-        } 
+    fn on_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::On)>(&mut self,text: &mut skip::TextW<'skip>, f: F) {
+        
     }
-    fn key_text<'skip,F: FnMut(&mut skip::TextW<'skip>, &skip::Key)>(&mut self,text: &mut skip::TextW<'skip>, mut f: F) {
-       for key in &self.key {
-           f(text, key) 
-        } 
+    fn on_div<F: FnMut(&mut skip::DivW, &skip::On)>(&mut self,div: &mut skip::DivW, f: F) {
+        
+    }
+    fn key_div<F: FnMut(&mut skip::DivW, &skip::Key)>(&mut self,div: &mut skip::DivW, f: F) {
+        
+    }
+    fn key_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::Key)>(&mut self,text: &mut skip::TextW<'skip>, f: F) {
+        
+    }
+    fn start_clip(&mut self, dim: &skip::DivW) {
+        
+    }
+    fn end_clip(&mut self) {
+        
     }
 }
 
@@ -79,8 +87,7 @@ pub struct Context<'skip> {
 
 
 impl<'skip> Context<'skip> {
-    pub fn new_window(&mut self, attr: winit::window::WindowAttributes) -> winit::window::WindowId {
-        //let window = self.event_loop.create_window(attr).unwrap();
+    pub fn new_window(&mut self, attr: winit::window::WindowAttributes) -> winit::window::WindowId { 
         let display_builder = glutin_winit::DisplayBuilder::new()
             .with_window_attributes(Some(attr.with_visible(false)))
             .with_preference(glutin_winit::ApiPreference::FallbackEgl);
@@ -150,8 +157,14 @@ impl<'skip> Context<'skip> {
             None,
         )
         .unwrap();
-        todo!("HERE!"); 
-        window.id()
+        let id = window.id();
+        self.windows.insert(id.clone(), Window { 
+            on: vec![], 
+            mouse_pos: ().into(), 
+            key: vec![], window, surface, 
+            dr_context: gr_context, skia_context: context , fb_info, gl_surface 
+        });
+        id
     }
 
     pub fn destroy(&mut self, id: &winit::window::WindowId) {
@@ -177,7 +190,7 @@ impl<'skip> Context<'skip> {
 
 impl<T: UserEvent + 'static, A: AppController<T>> winit::application::ApplicationHandler<T> for WinitRenderer<T, A> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        
+        self.app.bootstrap(Context { windows: &mut self.windows, event_loop });        
     }
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: T) {
@@ -196,22 +209,21 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
             Some(window) => {
                 match event {
                     winit::event::WindowEvent::KeyboardInput { event, .. } => {
-                //keycode_to_str(event.physical_key);
-                    match event.physical_key {
-                        winit::keyboard::PhysicalKey::Code(c) => {
-                            let key = keycode_to_str(c);
-                            let skip_key = match event.state {
-                                winit::event::ElementState::Pressed => {
-                                    skip::Key::Press(key)
-                                }
-                                winit::event::ElementState::Released => {
-                                    skip::Key::Release(key)
-                                }
-                            };
-                            window.key.push(skip_key);
-                        }
-                        winit::keyboard::PhysicalKey::Unidentified(_) => {
-                            window.key.push(skip::Key::Press("Unknown"));
+                        match event.physical_key {
+                            winit::keyboard::PhysicalKey::Code(c) => {
+                                let key = keycode_to_str(c);
+                                let skip_key = match event.state {
+                                    winit::event::ElementState::Pressed => {
+                                        skip::Key::Press(key)
+                                    }
+                                    winit::event::ElementState::Released => {
+                                        skip::Key::Release(key)
+                                    }
+                                };
+                                window.key.push(skip_key);
+                            }
+                            winit::keyboard::PhysicalKey::Unidentified(_) => {
+                                window.key.push(skip::Key::Press("Unknown"));
                         }
                     }
                     }
@@ -235,14 +247,41 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                     window.on.push(state);
                 }
                 winit::event::WindowEvent::RedrawRequested => {
-                    match self.app.draw(window_id, skip::Div::new((),window), &self.proxy) {
-                        Control::Kill => {
-                           self.windows.remove(&window_id); 
-                        }
-                        Control::Redraw => {
-                            window.window.request_redraw();                            
-                        }
+                    let canvas = window.surface.canvas();
+                    let run = self.app.draw(
+                        window_id, 
+                        skip::Div::new((), 
+                            &mut Canvas { 
+                                on: &window.on, 
+                                mouse_pos: &window.mouse_pos, 
+                                key: &window.key, canvas } 
+                            ), 
+                            &self.proxy
+                        );
+                    window.dr_context.flush_and_submit();
+                    window.gl_surface.swap_buffers(&window.skia_context).unwrap();
+                    match run {
+                            Control::Kill => {
+                                self.windows.remove(&window_id); 
+                            }
+                            Control::Redraw => {
+                                window.window.request_redraw();                            
+                            }
+                            Control::Suspend => ()
                     }
+                    
+                }
+                winit::event::WindowEvent::Resized(size) => {
+                    let backend_render_target =
+                    skia_safe::gpu::backend_render_targets::make_gl((size.width as i32, size.height as i32), 0, 8, window.fb_info);
+                    window.surface = skia_safe::gpu::surfaces::wrap_backend_render_target(
+                        &mut window.dr_context,
+                        &backend_render_target,
+                        skia_safe::gpu::SurfaceOrigin::BottomLeft,
+                        skia_safe::ColorType::RGBA8888,
+                        None,
+                        None,
+                    ).unwrap();                   
                 }
                 _=> ()
                 }
@@ -251,7 +290,28 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
     }
 }
 
-pub fn keycode_to_str(key: winit::keyboard::KeyCode) -> &'static str {
+struct App;
+
+enum Cool {}
+
+impl UserEvent for Cool {
+    
+}
+
+struct Proc;
+
+impl Proc {
+    fn tex(&mut self) {
+
+    }
+}
+
+fn main() {
+    println!("Hello, world!");
+}
+
+
+fn keycode_to_str(key: winit::keyboard::KeyCode) -> &'static str {
     use winit::keyboard::*;
     match key {
         // Letters
@@ -326,102 +386,3 @@ pub fn keycode_to_str(key: winit::keyboard::KeyCode) -> &'static str {
 }
 
 
-struct App;
-
-enum Cool {}
-
-impl UserEvent for Cool {
-    
-}
-
-struct Proc;
-
-impl Proc {
-    fn tex(&mut self) {
-
-    }
-}
-
-impl<'skip> skip::Proc<
-    'skip,
-    skip::Div<&'skip mut Window>,
-    skip::Text<'skip, &'skip mut Window>,
-    &'skip mut Window> for &mut Proc{
-    
-    fn consume(
-        &mut self,
-        widget: skip::Div<&'skip mut Window>,
-    ) -> skip::Text<'skip, &'skip mut Window> {
-        self.tex();
-        widget.to_text("Hello")
-    }
-}
-
-impl<'skip> skip::Proc<'skip,skip::Div<&'skip mut Window>,skip::Div<&'skip mut Window>, &'skip mut Window> for Proc {
-    fn consume(&mut self, widget: skip::Div<&'skip mut Window>) -> skip::Div<&'skip mut Window> {
-       widget 
-    }
-}
-
-impl AppController<Cool> for App {
-    fn bootstrap<'skip>(&mut self, context: Context<'skip>) {
-        
-    }
-    fn user_event<'skip>(
-        &mut self, 
-        user_event: Cool, 
-        context: Context<'skip>
-    ) {
-
-
-        
-    }
-
-    fn draw(
-        &mut self, 
-        on: winit::window::WindowId, 
-        ui: skip::Div<&mut Window>, 
-        proxy: &winit::event_loop::EventLoopProxy<Cool>
-    ) -> Control {
-        ui
-            .pos((10.0, 10.0))
-            .color((10, 255, 33,12))
-            .dim((100.0,100.0))
-            .on(|div, on| {
-                match on {
-                    skip::On::Hover(_) => {
-                        div.color.g = 255;
-                    }
-                    skip::On::Press(skip::Mouse::Left) => {
-                        div.color.a = 0;
-                    }
-                    _ => ()
-                }
-                
-            })
-            .render()
-                .children(|c| {
-                    c.text(|t| {
-                        t
-                    })
-                })
-                .to_text(("Hello!", 0, 1))
-                .on(|text, on| {
-                    match on {
-                        skip::On::Hover(_) => {
-                            text.color.a = 255;
-                        }
-                        skip::On::Press(skip::Mouse::Left) => {
-                            text.color.b = 0;
-                        }
-                        _ => ()
-                }
-                })
-                .render();
-        Control::Redraw 
-    }
-}
-
-fn main() {
-    println!("Hello, world!");
-}
