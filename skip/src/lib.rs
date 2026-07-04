@@ -55,6 +55,10 @@ pub struct Point<R: Renderer> {
 }
 
 impl<'skip, R: Renderer> Point<R> {
+    pub fn new(renderer: R) -> Self {
+        Self { pos: (0.0, 0.0).into(), renderer }
+    }
+
     pub fn div(self) -> Div<R> {
         Div { 
             widget: ((), self.pos).into(),
@@ -161,9 +165,10 @@ impl<'skip,R: Renderer> Div<R> {
  
     }
 
-    pub fn proc<P: Proc<'skip, Self, Out, R>, Out: Widget<'skip, R>>(self, mut p: P) -> Out {
-        p.consume(self)
+    pub fn proc<P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, mut proc: (P, Arg)) -> Out {
+        proc.0.consume(self, proc.1)
     }
+
 
     pub fn horizontal<F: FnMut(Horizontal<R>) -> W, W:Widget<'skip,R>>(mut self, mut f: F) -> Self {
         let w = f(Horizontal { y_anchor: self.widget.pos.y, x_offset: self.widget.pos.x,dim: (&self.widget.dim).into(), gap: 0.0, renderer: self.renderer });
@@ -245,22 +250,38 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self
     }
 
-    pub fn proc<P: Proc<'skip, Self, Out, R>, Out: Widget<'skip, R>>(self, mut p: P) -> Out {
-        p.consume(self)
+    pub fn proc<P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, mut proc: (P, Arg)) -> Out {
+        proc.0.consume(self, proc.1)
     }
 
 }
 
 pub trait Renderer {
-    fn render_text<'skip>(&mut self, text: &TextW<'skip>);
-    fn render_div(&mut self, div: &DivW);
-    fn on_text<'skip, F: FnMut(&mut TextW<'skip>, &On)>(&mut self,text: &mut TextW<'skip>, f: F); 
-    fn on_div<F: FnMut(&mut DivW, &On)>(&mut self,div: &mut DivW, f: F);
-    fn key_div<F: FnMut(&mut DivW, &Key)>(&mut self,div: &mut DivW, f: F);
-    fn key_text<'skip, F: FnMut(&mut TextW<'skip>, &Key)>(&mut self,text: &mut TextW<'skip>, f: F);
-    fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
-    fn start_clip(&mut self, dim: &DivW);
-    fn end_clip(&mut self);
+    fn render_text<'skip>(&self, text: &TextW<'skip>);
+    fn render_div(&self, div: &DivW);
+    fn on_text<'skip, F: FnMut(&mut TextW<'skip>, &On)>(& self,text: &mut TextW<'skip>, f: F); 
+    fn on_div<F: FnMut(&mut DivW, &On)>(& self,div: &mut DivW, f: F);
+    fn key_div<F: FnMut(&mut DivW, &Key)>(& self,div: &mut DivW, f: F);
+    fn key_text<'skip, F: FnMut(&mut TextW<'skip>, &Key)>(&self,text: &mut TextW<'skip>, f: F);
+    fn text_size<'skip>(&self, text: &TextW<'skip>) -> Vec2<f32>;
+    fn start_clip(&self, dim: &DivW);
+    fn end_clip(& self);
+}
+
+pub trait Proc<
+    'skip, 
+    In: Widget<'skip, R>, 
+    Out: Widget<'skip, R>, 
+    R: Renderer,
+    Arg,
+    > {
+    fn consume(&mut self, widget: In, argv: Arg) -> Out;
+}
+
+impl<'skip,P: Proc<'skip, In, Out, R, ()>, In: Widget<'skip, R>, Out: Widget<'skip,R>, R: Renderer> From<(P)> for (P, ()) {
+    fn from(value: (P)) -> Self {
+        (value, ()) 
+    }
 }
 
 pub(crate) trait Widget<'skip, R: Renderer> {
@@ -315,10 +336,6 @@ impl<'skip, R: Renderer> Widget<'skip, R>  for Text<'skip,R> {
     fn size(&self) -> Vec2<f32> {
         self.renderer.text_size(&self.widget)
     }
-}
-
-pub trait Proc<'skip, In: Widget<'skip, R>, Out: Widget<'skip, R>, R: Renderer> {
-    fn consume(&mut self, widget: In) -> Out;
 }
 
 pub enum On {
