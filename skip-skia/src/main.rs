@@ -20,7 +20,7 @@ pub trait AppController<T: UserEvent> {
     fn draw(
         &mut self, 
         on: winit::window::WindowId, 
-        ui: skip::Point<&mut Canvas>, 
+        ui: skip::Point<Canvas>, 
         proxy: &winit::event_loop::EventLoopProxy<T>
     ) -> Control;
 }
@@ -45,35 +45,35 @@ struct Canvas<'skip> {
     paint: &'skip mut skia_safe::Paint,
 }
 
-impl<'a> skip::Renderer for &mut Canvas<'a> {
-    fn render_div(&self, div: &skip::DivW) {
+impl<'a> skip::Renderer for Canvas<'a> {
+    fn render_div(&mut self, div: &skip::DivW) {
         self.paint.set_argb(div.color.a, div.color.r, div.color.g, div.color.b);
         self.canvas.draw_rect(
             skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.dim.x, div.dim.y),
             self.paint);
     }
-    fn text_size<'skip>(&self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
+    fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
         ().into()
     }
-    fn render_text<'skip>(&self, text: &skip::TextW<'skip>) {
+    fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>) {
         
     }
-    fn on_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::On)>(& self,text: &mut skip::TextW<'skip>, f: F) {
+    fn on_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::On)>(&mut self,text: &mut skip::TextW<'skip>, f: F) {
         
     }
-    fn on_div<F: FnMut(&mut skip::DivW, &skip::On)>(&self,div: &mut skip::DivW, f: F) {
+    fn on_div<F: FnMut(&mut skip::DivW, &skip::On)>(&mut self,div: &mut skip::DivW, f: F) {
         
     }
-    fn key_div<F: FnMut(&mut skip::DivW, &skip::Key)>(&self,div: &mut skip::DivW, f: F) {
+    fn key_div<F: FnMut(&mut skip::DivW, &skip::Key)>(&mut self,div: &mut skip::DivW, f: F) {
         
     }
-    fn key_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::Key)>(&self,text: &mut skip::TextW<'skip>, f: F) {
+    fn key_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::Key)>(&mut self,text: &mut skip::TextW<'skip>, f: F) {
         
     }
-    fn start_clip(&self, dim: &skip::DivW) {
+    fn start_clip(&mut self, dim: &skip::DivW) {
         //self.canvas.clip_path(path, op, do_anti_alias)
     }
-    fn end_clip(&self) {
+    fn end_clip(&mut self) {
         
     }
 }
@@ -256,7 +256,7 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                     let run = self.app.draw(
                         window_id, 
                         skip::Point::new( 
-                            &mut Canvas { 
+                            Canvas { 
                                 on: &window.on, 
                                 mouse_pos: &window.mouse_pos, 
                                 key: &window.key, 
@@ -307,12 +307,22 @@ impl UserEvent for Cool {
 }
 
 
+struct Complex;
+
+impl<'skip,
+    T,
+    Arg: skip::Proc<'skip, skip::Div<Canvas<'skip>>, skip::Div<Canvas<'skip>>, Canvas<'skip>, T>> 
+    skip::Proc<'skip, skip::Div<Canvas<'skip>>, skip::Div<Canvas<'skip>>,Canvas<'skip>, (Arg, T)> for Complex {
+        fn consume(&mut self, widget: skip::Div<Canvas<'skip>>, argv: (Arg, T)) -> skip::Div<Canvas<'skip>> {
+            widget.proc(argv) 
+        }
+}
 
 struct Proc;
 
-impl Proc {
-    fn tex(&mut self) {
-
+impl<'skip> skip::Proc<'skip, skip::Div<Canvas<'skip>>, skip::Div<Canvas<'skip>>,Canvas<'skip>, usize> for Proc {
+    fn consume(&mut self, widget: skip::Div<Canvas<'skip>>, argv: usize) -> skip::Div<Canvas<'skip>> {
+        widget
     }
 }
 
@@ -323,7 +333,7 @@ impl AppController<Cool> for App {
    fn draw(
        &mut self, 
        on: winit::window::WindowId, 
-       ui: skip::Point<&mut Canvas>, 
+       ui: skip::Point<Canvas>, 
        proxy: &winit::event_loop::EventLoopProxy<Cool>
    ) -> Control {
        ui
@@ -331,12 +341,13 @@ impl AppController<Cool> for App {
            .dim((100.0, 100.0))
            .color((233, 255, 10, 100))
            .render()
+           .proc((Complex, (Proc, (21))))
            .vertical(|v| {
                 v.add(|p| {
                     p
                         .div()
                         //etc and the like
-                });  
+                })  
            });
        Control::Redraw
    }

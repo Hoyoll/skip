@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -71,12 +73,17 @@ impl<'skip, R: Renderer> Point<R> {
         text_w.pos = self.pos;
         Text { widget: text_w, renderer: self.renderer }
     }
+
+    pub fn proc<PA: Into<ProcArg<'skip, P, Self, Out, R, Arg>>, P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, proc: PA) -> Out {
+        let mut pa = proc.into();
+        pa.proc.consume(self, pa.arg)
+    }
 }
 
 impl<'skip, R: Renderer> Horizontal<R> {
     pub fn add<F: FnMut(Point<R>) -> W, W: Widget<'skip, R>>(mut self, mut f: F) -> Self {
         self.x_offset += self.gap;
-        let w = f(Point { pos: (self.x_offset, self.y_anchor).into(), renderer: self.renderer });
+        let mut w = f(Point { pos: (self.x_offset, self.y_anchor).into(), renderer: self.renderer });
         let size = w.size();
         self.x_offset += size.x;
         self.renderer = w.renderer();
@@ -93,12 +100,17 @@ impl<'skip, R: Renderer> Horizontal<R> {
         self.x_offset += pad.x;
         self
     }
+
+    pub fn proc<PA: Into<ProcArg<'skip, P, Self, Out, R, Arg>>, P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, proc: PA) -> Out {
+        let mut pa = proc.into();
+        pa.proc.consume(self, pa.arg)
+    }
 }
 
 impl<'skip,R: Renderer> Vertical<R> {
     pub fn add<F: FnMut(Point<R>) -> W, W: Widget<'skip, R>>(mut self, mut f: F) -> Self {
         self.y_offset += self.gap;
-        let w = f(Point { pos: (self.x_anchor, self.y_offset).into(), renderer: self.renderer });
+        let mut w = f(Point { pos: (self.x_anchor, self.y_offset).into(), renderer: self.renderer });
         let size = w.size();
         self.y_offset += size.y;
         self.renderer = w.renderer();
@@ -114,6 +126,11 @@ impl<'skip,R: Renderer> Vertical<R> {
         self.x_anchor += pad.x;
         self.y_offset += pad.y;
         self
+    }
+
+    pub fn proc<PA: Into<ProcArg<'skip, P, Self, Out, R, Arg>>, P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, proc: PA) -> Out {
+        let mut pa = proc.into();
+        pa.proc.consume(self, pa.arg)
     }
 }
 
@@ -161,14 +178,13 @@ impl<'skip,R: Renderer> Div<R> {
 
     pub fn key<F: FnMut(&mut DivW,  &Key)>(mut self, f: F) -> Self {
         self.renderer.key_div(&mut self.widget, f);
-        self
- 
+        self 
     }
 
-    pub fn proc<P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, mut proc: (P, Arg)) -> Out {
-        proc.0.consume(self, proc.1)
+    pub fn proc<PA: Into<ProcArg<'skip, P, Self, Out, R, Arg>>, P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, proc: PA) -> Out {
+        let mut pa = proc.into();
+        pa.proc.consume(self, pa.arg)
     }
-
 
     pub fn horizontal<F: FnMut(Horizontal<R>) -> W, W:Widget<'skip,R>>(mut self, mut f: F) -> Self {
         let w = f(Horizontal { y_anchor: self.widget.pos.y, x_offset: self.widget.pos.x,dim: (&self.widget.dim).into(), gap: 0.0, renderer: self.renderer });
@@ -250,22 +266,22 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self
     }
 
-    pub fn proc<P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, mut proc: (P, Arg)) -> Out {
-        proc.0.consume(self, proc.1)
+    pub fn proc<PA: Into<ProcArg<'skip, P, Self, Out, R, Arg>>, P: Proc<'skip, Self, Out, R, Arg>, Out: Widget<'skip, R>, Arg>(self, proc: PA) -> Out {
+        let mut pa = proc.into();
+        pa.proc.consume(self, pa.arg)
     }
-
 }
 
 pub trait Renderer {
-    fn render_text<'skip>(&self, text: &TextW<'skip>);
-    fn render_div(&self, div: &DivW);
-    fn on_text<'skip, F: FnMut(&mut TextW<'skip>, &On)>(& self,text: &mut TextW<'skip>, f: F); 
-    fn on_div<F: FnMut(&mut DivW, &On)>(& self,div: &mut DivW, f: F);
-    fn key_div<F: FnMut(&mut DivW, &Key)>(& self,div: &mut DivW, f: F);
-    fn key_text<'skip, F: FnMut(&mut TextW<'skip>, &Key)>(&self,text: &mut TextW<'skip>, f: F);
-    fn text_size<'skip>(&self, text: &TextW<'skip>) -> Vec2<f32>;
-    fn start_clip(&self, dim: &DivW);
-    fn end_clip(& self);
+    fn render_text<'skip>(&mut self, text: &TextW<'skip>);
+    fn render_div(&mut self, div: &DivW);
+    fn on_text<'skip, F: FnMut(&mut TextW<'skip>, &On)>(&mut self,text: &mut TextW<'skip>, f: F); 
+    fn on_div<F: FnMut(&mut DivW, &On)>(&mut self,div: &mut DivW, f: F);
+    fn key_div<F: FnMut(&mut DivW, &Key)>(&mut self,div: &mut DivW, f: F);
+    fn key_text<'skip, F: FnMut(&mut TextW<'skip>, &Key)>(&mut self,text: &mut TextW<'skip>, f: F);
+    fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
+    fn start_clip(&mut self, dim: &DivW);
+    fn end_clip(&mut self);
 }
 
 pub trait Proc<
@@ -278,22 +294,22 @@ pub trait Proc<
     fn consume(&mut self, widget: In, argv: Arg) -> Out;
 }
 
-impl<'skip,P: Proc<'skip, In, Out, R, ()>, In: Widget<'skip, R>, Out: Widget<'skip,R>, R: Renderer> From<(P)> for (P, ()) {
-    fn from(value: (P)) -> Self {
-        (value, ()) 
-    }
+pub(crate) struct ProcArg<'skip, P: Proc<'skip,In, Out, R, Arg>, In:Widget<'skip, R>, Out: Widget<'skip, R>, R:Renderer, Arg> {
+    proc: P,
+    arg: Arg,
+    ph: PhantomData<(&'skip (), In, Out, Arg, R)>,
 }
 
 pub(crate) trait Widget<'skip, R: Renderer> {
     fn renderer(self) -> R;
-    fn size(&self) -> Vec2<f32>; 
+    fn size(&mut self) -> Vec2<f32>; 
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R> for Point<R> {
     fn renderer(self) -> R {
         self.renderer
     }
-    fn size(&self) -> Vec2<f32> {
+    fn size(&mut self) -> Vec2<f32> {
         ().into()
     }
 }
@@ -302,7 +318,7 @@ impl<'skip,R: Renderer> Widget<'skip, R> for Horizontal<R> {
    fn renderer(self) -> R {
        self.renderer
    } 
-   fn size(&self) -> Vec2<f32> {
+   fn size(&mut self) -> Vec2<f32> {
        (&self.dim).into()
    }
 }
@@ -312,7 +328,7 @@ impl<'skip,R: Renderer> Widget<'skip, R> for Vertical<R> {
    fn renderer(self) -> R {
        self.renderer
    } 
-   fn size(&self) -> Vec2<f32> {
+   fn size(&mut self) -> Vec2<f32> {
        (&self.dim).into()
    }
 }
@@ -322,7 +338,7 @@ impl<'skip, R: Renderer> Widget<'skip, R>  for Div<R> {
         self.renderer
     }
 
-    fn size(&self) -> Vec2<f32> {
+    fn size(&mut self) -> Vec2<f32> {
         (self.widget.dim.x, self.widget.dim.y).into()
     }
 
@@ -333,7 +349,7 @@ impl<'skip, R: Renderer> Widget<'skip, R>  for Text<'skip,R> {
         self.renderer
     }
 
-    fn size(&self) -> Vec2<f32> {
+    fn size(&mut self) -> Vec2<f32> {
         self.renderer.text_size(&self.widget)
     }
 }
@@ -356,7 +372,6 @@ pub enum Key {
     Release(&'static str)
 }
 
-
 pub struct Vec2<T> {
     pub x: T,
     pub y: T,
@@ -365,6 +380,18 @@ pub struct Vec2<T> {
 impl<T> Vec2<T> {
     pub fn new(x: T, y: T) -> Self {
         Self { x, y }
+    }
+}
+
+impl<'skip, P: Proc<'skip,In, Out, R, Arg>, In:Widget<'skip, R>, Out: Widget<'skip, R>, R:Renderer, Arg> From<(P, Arg)> for ProcArg<'skip,P, In, Out,R, Arg> {
+    fn from(value: (P, Arg)) -> Self {
+        Self { proc: value.0, arg: value.1, ph: PhantomData::default() }
+    }
+}
+
+impl<'skip, P: Proc<'skip,In, Out, R, ()>, In:Widget<'skip, R>, Out: Widget<'skip, R>, R:Renderer> From<(P)> for ProcArg<'skip,P, In, Out,R, ()> {
+    fn from(value: (P)) -> Self {
+        Self { proc: value, arg: (), ph: PhantomData::default() }
     }
 }
 
