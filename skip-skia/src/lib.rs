@@ -20,7 +20,7 @@ pub trait AppController<T: UserEvent> {
     fn draw(
         &mut self, 
         on: winit::window::WindowId, 
-        ui: skip::Point<Canvas>, 
+        ui: skip::Horizontal<Canvas>, 
         proxy: &winit::event_loop::EventLoopProxy<T>
     ) -> Control;
 }
@@ -37,44 +37,106 @@ struct Window {
     gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>, 
 }
 
-struct Canvas<'skip> {
+pub struct Canvas<'skip> {
     on: &'skip Vec<skip::On>,
     mouse_pos: &'skip skip::Vec2<f32>,
     key: &'skip Vec<skip::Key>,
     canvas: &'skip skia_safe::Canvas,
     paint: &'skip mut skia_safe::Paint,
+    fonts: &'skip Vec<skia_safe::Font>,
+    images: &'skip Vec<skia_safe::Image>
+}
+
+impl<'skip> Canvas<'skip> {
+  
 }
 
 impl<'a> skip::Renderer for Canvas<'a> {
     fn render_div(&mut self, div: &skip::DivW) {
         self.paint.set_argb(div.color.a, div.color.r, div.color.g, div.color.b);
-        self.canvas.draw_rect(
-            skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.dim.x, div.dim.y),
-            self.paint);
+        self.canvas.draw_round_rect(
+            skia_safe::Rect::from_xywh(
+                div.pos.x, 
+                div.pos.y, 
+                div.dim.x, 
+                div.dim.y
+            ),
+            div.rad, 
+            div.rad, 
+            self.paint
+        ); 
     }
+
+    fn on_div<F: FnMut(&mut skip::DivW, &skip::On)>(&mut self,div: &mut skip::DivW, mut f: F) {
+        let hovered = 
+            (self.mouse_pos.x >= div.pos.x) && (self.mouse_pos.y >= div.pos.y)
+            && (self.mouse_pos.x <= (div.pos.x + div.dim.x))
+            && (self.mouse_pos.y <= (div.pos.y + div.pos.y));
+        if hovered {
+            f(div, &skip::On::Hover((&self.mouse_pos).into()));
+            for on in self.on {
+                f(div, on)
+            }
+        }
+    }
+    fn key_div<F: FnMut(&mut skip::DivW, &skip::Key)>(&mut self,div: &mut skip::DivW, mut f: F) {
+        for key in self.key {
+            f(div, key);
+        }
+    }
+
     fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
-        ().into()
+        let fonts = &self.fonts[text.font_id];
+        let (_, rect) = fonts.measure_str(text.text, None);
+        (rect.width(), rect.height()).into()
     }
     fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>) {
-        
+        self.paint.set_argb(text.color.a, text.color.r, text.color.g, text.color.b);
+        self.canvas.draw_str(text.text, (text.pos.x, text.pos.y), &self.fonts[text.font_id], self.paint);
     }
-    fn on_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::On)>(&mut self,text: &mut skip::TextW<'skip>, f: F) {
-        
+    
+    fn render_img(&mut self, img: &skip::ImageW) {
+        match self.images.get(img.image_id) {
+            Some(image) => {
+                self.paint.set_argb(img.tint.a, img.tint.r, img.tint.g, img.tint.b);
+                self.canvas.draw_image_rect(
+                    image, 
+                    None, 
+                    skia_safe::Rect::from_xywh(img.pos.x, img.pos.y, img.dim.x, img.dim.y), 
+                    self.paint
+                );
+            }
+            None => ()
+        }
     }
-    fn on_div<F: FnMut(&mut skip::DivW, &skip::On)>(&mut self,div: &mut skip::DivW, f: F) {
-        
+
+    fn on_img<F: FnMut(&mut skip::ImageW, &skip::On)>(&mut self,img: &mut skip::ImageW, f: F) {
+        let hovered = 
+            (self.mouse_pos.x >= img.pos.x) && (self.mouse_pos.y >= img.pos.y)
+            && (self.mouse_pos.x <= (img.pos.x + img.dim.x))
+            && (self.mouse_pos.y <= (img.pos.y + img.pos.y));
+        if hovered {
+            f(div, &skip::On::Hover((&self.mouse_pos).into()));
+            for on in self.on {
+                f(div, on)
+            }
+        }
     }
-    fn key_div<F: FnMut(&mut skip::DivW, &skip::Key)>(&mut self,div: &mut skip::DivW, f: F) {
-        
+
+    fn key_img<F: FnMut(&mut skip::ImageW, &skip::Key)>(&mut self,img: &mut skip::ImageW, mut f: F) {
+        for key in self.key {
+            f(img, key)
+        }
     }
-    fn key_text<'skip, F: FnMut(&mut skip::TextW<'skip>, &skip::Key)>(&mut self,text: &mut skip::TextW<'skip>, f: F) {
-        
-    }
+     
     fn start_clip(&mut self, dim: &skip::DivW) {
-        //self.canvas.clip_path(path, op, do_anti_alias)
+        self.canvas.save();
+        let rect = skia_safe::Rect::from_xywh(dim.pos.x, dim.pos.y, dim.dim.x, dim.dim.y);
+        let mut path = skia_safe::Path::rect(&rect, None);
+        self.canvas.clip_path(&path, None, Some(true));
     }
     fn end_clip(&mut self) {
-        
+       self.canvas.restore(); 
     }
 }
 
@@ -83,13 +145,18 @@ struct WinitRenderer<T: UserEvent + 'static, A: AppController<T>> {
     proxy: winit::event_loop::EventLoopProxy<T>,
     app: A,
     paint: skia_safe::Paint,
+    fonts: Vec<skia_safe::Font>,
+    font_mgr: skia_safe::FontMgr,
+    images: Vec<skia_safe::Image>
 }
 
 pub struct Context<'skip> {
     windows: &'skip mut HashMap<winit::window::WindowId, Window>,
     event_loop: &'skip winit::event_loop::ActiveEventLoop,
+    fonts: &'skip mut Vec<skia_safe::Font>,
+    font_mgr: &'skip mut skia_safe::FontMgr,
+    images: &'skip mut Vec<skia_safe::Image>
 }
-
 
 impl<'skip> Context<'skip> {
     pub fn new_window(&mut self, attr: winit::window::WindowAttributes) -> winit::window::WindowId { 
@@ -176,6 +243,45 @@ impl<'skip> Context<'skip> {
         self.windows.remove(id);
     }
 
+    pub fn new_font(&mut self, data: &[u8], size: f32, font_id: Option<skip::Font>) -> Result<skip::Font, ()> {
+        let tf = self.font_mgr.new_from_data(data, None);
+        match tf {
+            Some(tf) => {
+                let font = skia_safe::Font::from_typeface(&tf, Some(size));
+                match font_id {
+                    Some(id ) => {
+                        self.fonts.insert(id, font);
+                        Ok(id)
+                    }
+                    None => {
+                        self.fonts.push(font);
+                        Ok(self.fonts.len() - 1)
+                    }
+                } 
+            }
+            None => Err(())
+        } 
+    }
+    
+    pub fn new_image(&mut self, data: &[u8], img_id: Option<skip::ImageId>) -> Result<skip::ImageId, ()> {
+        let data = skia_safe::Data::new_copy(data);
+        match skia_safe::Image::from_encoded(data) {
+            Some(img ) => {
+                match img_id {
+                    Some(id) => {
+                        self.images.insert(id, img);
+                        Ok(id)
+                    }
+                    None => {
+                        self.images.push(img);
+                        Ok(self.images.len() - 1)
+                    }
+                }
+            }
+            None => Err(())
+        }
+    }
+
     pub fn set_visible(&mut self, id: &winit::window::WindowId, visible: bool) {
         if let Some(window) = self.windows.get_mut(id) {
             window.window.set_visible(visible);
@@ -195,11 +301,25 @@ impl<'skip> Context<'skip> {
 
 impl<T: UserEvent + 'static, A: AppController<T>> winit::application::ApplicationHandler<T> for WinitRenderer<T, A> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.app.bootstrap(Context { windows: &mut self.windows, event_loop });        
+        self.app.bootstrap(Context { 
+            windows: &mut self.windows, 
+            event_loop, 
+            fonts: &mut self.fonts, 
+            font_mgr: &mut self.font_mgr, 
+            images: &mut self.images 
+        });        
     }
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: T) {
-        self.app.user_event(event, Context { windows: &mut self.windows, event_loop });
+        self.app.user_event(event, 
+            Context { 
+                windows: &mut self.windows, 
+                event_loop, 
+                fonts: &mut self.fonts, 
+                font_mgr: &mut self.font_mgr,
+                images: &mut self.images
+            }
+        );
     }
 
     fn window_event(
@@ -254,14 +374,16 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                 winit::event::WindowEvent::RedrawRequested => {
                     let canvas = window.surface.canvas();
                     let run = self.app.draw(
-                        window_id, 
-                        skip::Point::new( 
+                        window_id,
+                        skip::Horizontal::new( 
                             Canvas { 
-                                on: &window.on, 
-                                mouse_pos: &window.mouse_pos, 
-                                key: &window.key, 
-                                canvas,
-                                paint: &mut self.paint
+                                    on: &window.on, 
+                                    mouse_pos: &window.mouse_pos, 
+                                    key: &window.key, 
+                                    canvas,
+                                    paint: &mut self.paint,
+                                    fonts: &self.fonts,
+                                    images: &self.images
                                 } 
                             ), 
                             &self.proxy
@@ -333,22 +455,24 @@ impl AppController<Cool> for App {
    fn draw(
        &mut self, 
        on: winit::window::WindowId, 
-       ui: skip::Point<Canvas>, 
+       ui: skip::Horizontal<Canvas>, 
        proxy: &winit::event_loop::EventLoopProxy<Cool>
    ) -> Control {
+       let mut ve = vec![Proc, Proc];
        ui
-           .div()
-           .dim((100.0, 100.0))
-           .color((233, 255, 10, 100))
-           .render()
-           .proc((Complex, (Proc, (21))))
-           .vertical(|v| {
-                v.add(|p| {
-                    p
-                        .div()
-                        //etc and the like
-                })  
-           });
+           .add(|div: skip::Div<_>| {
+            div
+                .proc((Complex, (Proc, 10)))
+                .render()
+                .vertical(|v| {
+                    v.iter(ve.iter(), |div: skip::Div<_>, i| {
+                        div
+                    })
+                })
+            .vertical(|v| {
+                v
+            })  
+       });
        Control::Redraw
    }
    fn user_event<'skip>(
