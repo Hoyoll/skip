@@ -1464,6 +1464,11 @@ version = "0.1.0"
 [[package]]
 name = "skip-project"
 version = "0.0.1"
+dependencies = [
+ "skip",
+ "skip-skia",
+ "winit",
+]
 
 [[package]]
 name = "skip-skia"

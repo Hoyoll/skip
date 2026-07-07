@@ -8,4 +8,11 @@ resolver = "3"
 members = ["skip-skia", "skip"]
 
 [workspace.dependencies]
-skip = { path = "skip"}
+skip = { path = "skip" }
+skip-skia = { path = "skip-skia" }
+winit = "0.30.13"
+
+[dependencies]
+skip.workspace = true
+skip-skia.workspace = true
+winit.workspace = true
