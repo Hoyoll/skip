@@ -12,12 +12,16 @@ use glutin::{
 };
 use raw_window_handle::HasWindowHandle;
 
-pub fn run_app<App: AppController<Event>, Event: UserEvent + 'static>(app: App) {
+pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'static>(app: App) {
     let event_loop: winit::event_loop::EventLoop<Event> =
         winit::event_loop::EventLoop::with_user_event()
             .build()
             .unwrap();
     let mut wn = WinitRenderer {
+        on: Vec::new(),
+        key: Vec::new(),
+        mouse_pos: (0.0,0.0).into(),
+        current_focus: winit::window::WindowId::dummy(),
         app,
         windows: HashMap::new(),
         proxy: event_loop.create_proxy(),
@@ -30,35 +34,38 @@ pub fn run_app<App: AppController<Event>, Event: UserEvent + 'static>(app: App) 
     event_loop.run_app(&mut wn);
 }
 
-pub enum Control {
-    Redraw,
-    Suspend,
-}
-
 pub trait UserEvent {}
-pub trait AppController<T: UserEvent> {
-    fn bootstrap<'skip>(&mut self, context: Context<'skip>);
-    fn user_event<'skip>(&mut self, user_event: T, context: Context<'skip>);
-    fn draw(
-        &mut self,
-        on: winit::window::WindowId,
-        ui: skip::Horizontal<Canvas>,
-        proxy: &winit::event_loop::EventLoopProxy<T>,
-    ) -> Option<Duration>;
+
+pub struct DrawFn<Shared, T: UserEvent + 'static>(
+    pub  fn(
+        &mut Shared,
+        skip::Horizontal<Canvas>,
+        &winit::event_loop::EventLoopProxy<T>,
+    ) -> Option<Duration>,
+);
+
+pub trait AppController<T: UserEvent, Shared> {
+    fn bootstrap<'skip>(&mut self, context: Context<'skip, Shared, T>);
+    fn user_event<'skip>(&mut self, user_event: T, context: Context<'skip, Shared, T>);
+    fn share_resource(&mut self) -> &mut Shared;
 }
 
-struct Window {
-    on: Vec<skip::On>,
-    mouse_pos: skip::Vec2<f32>,
-    key: Vec<skip::Key>,
+pub enum Redraw {
+    FocusOnly,
+    Always,
+}
+
+struct Window<Shared, T: UserEvent + 'static> {
     window: winit::window::Window,
     surface: skia_safe::Surface,
     dr_context: skia_safe::gpu::DirectContext,
     skia_context: glutin::context::PossiblyCurrentContext,
     fb_info: skia_safe::gpu::gl::FramebufferInfo,
     gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
+    draw_fn: DrawFn<Shared, T>,
     next_redraw: Option<Instant>,
-    focused: bool,
+    redraw_policy: Redraw,
+    //focused: bool,
 }
 
 pub struct Canvas<'skip> {
@@ -71,8 +78,6 @@ pub struct Canvas<'skip> {
     images: &'skip Vec<skia_safe::Image>,
     window_dim: skip::Vec2<f32>,
 }
-
-impl<'skip> Canvas<'skip> {}
 
 impl<'a> skip::Renderer for Canvas<'a> {
     fn render_div(&mut self, div: &skip::DivW) {
@@ -193,10 +198,31 @@ impl<'a> skip::Renderer for Canvas<'a> {
     fn end_clip(&mut self) {
         self.canvas.restore();
     }
+
+    fn on_layout<F: FnMut(&mut skip::Layout, &skip::On)>(
+        &mut self,
+        div: &mut skip::Layout,
+        mut f: F,
+    ) {
+        let hovered = (self.mouse_pos.x >= div.pos.x)
+            && (self.mouse_pos.y >= div.pos.y)
+            && (self.mouse_pos.x <= (div.pos.x + div.dim.x))
+            && (self.mouse_pos.y <= (div.pos.y + div.dim.y));
+        if hovered {
+            f(div, &skip::On::Hover((self.mouse_pos).into()));
+            for on in self.on {
+                f(div, on)
+            }
+        }
+    }
 }
 
-struct WinitRenderer<T: UserEvent + 'static, A: AppController<T>> {
-    windows: HashMap<winit::window::WindowId, Window>,
+struct WinitRenderer<T: UserEvent + 'static, A: AppController<T, Shared>, Shared> {
+    windows: HashMap<winit::window::WindowId, Window<Shared, T>>,
+    on: Vec<skip::On>,
+    key: Vec<skip::Key>,
+    mouse_pos: skip::Vec2<f32>,
+    current_focus: winit::window::WindowId,
     proxy: winit::event_loop::EventLoopProxy<T>,
     app: A,
     paint: skia_safe::Paint,
@@ -205,16 +231,20 @@ struct WinitRenderer<T: UserEvent + 'static, A: AppController<T>> {
     images: Vec<skia_safe::Image>,
 }
 
-pub struct Context<'skip> {
-    windows: &'skip mut HashMap<winit::window::WindowId, Window>,
+pub struct Context<'skip, Shared, T: UserEvent + 'static> {
+    windows: &'skip mut HashMap<winit::window::WindowId, Window<Shared, T>>,
     event_loop: &'skip winit::event_loop::ActiveEventLoop,
     fonts: &'skip mut Vec<skia_safe::Font>,
     font_mgr: &'skip mut skia_safe::FontMgr,
     images: &'skip mut Vec<skia_safe::Image>,
 }
 
-impl<'skip> Context<'skip> {
-    pub fn new_window(&mut self, attr: winit::window::WindowAttributes) -> winit::window::WindowId {
+impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
+    pub fn new_window(
+        &mut self,
+        attr: winit::window::WindowAttributes,
+        draw_fn: DrawFn<Shared, T>,
+    ) -> winit::window::WindowId {
         let display_builder = glutin_winit::DisplayBuilder::new()
             .with_window_attributes(Some(attr.with_visible(false)))
             .with_preference(glutin_winit::ApiPreference::FallbackEgl);
@@ -285,17 +315,16 @@ impl<'skip> Context<'skip> {
         self.windows.insert(
             id.clone(),
             Window {
-                on: vec![],
-                mouse_pos: ().into(),
-                key: vec![],
                 window,
                 surface,
                 dr_context: gr_context,
                 skia_context: context,
                 fb_info,
                 gl_surface,
-                focused: false,
-                next_redraw: None 
+                //focused: false,
+                draw_fn,
+                next_redraw: None,
+                redraw_policy: Redraw::FocusOnly,
             },
         );
         id
@@ -303,6 +332,12 @@ impl<'skip> Context<'skip> {
 
     pub fn destroy(&mut self, id: &winit::window::WindowId) {
         self.windows.remove(id);
+    }
+
+    pub fn change_draw_fn(&mut self, id: &winit::window::WindowId, draw_fn: DrawFn<Shared, T>) {
+        if let Some(window) = self.windows.get_mut(id) {
+            window.draw_fn = draw_fn
+        }
     }
 
     pub fn new_font(
@@ -376,8 +411,8 @@ impl<'skip> Context<'skip> {
     }
 }
 
-impl<T: UserEvent + 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
-    for WinitRenderer<T, A>
+impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
+    winit::application::ApplicationHandler<T> for WinitRenderer<T, A, Shared>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.app.bootstrap(Context {
@@ -451,10 +486,10 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                                 winit::event::ElementState::Pressed => skip::Key::Press(key),
                                 winit::event::ElementState::Released => skip::Key::Release(key),
                             };
-                            window.key.push(skip_key);
+                            self.key.push(skip_key);
                         }
                         winit::keyboard::PhysicalKey::Unidentified(_) => {
-                            window.key.push(skip::Key::Press("Unknown"));
+                            self.key.push(skip::Key::Press("Unknown"));
                         }
                     }
                 }
@@ -469,21 +504,31 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                         winit::event::ElementState::Pressed => skip::On::Press(button),
                         winit::event::ElementState::Released => skip::On::Release(button),
                     };
-                    window.on.push(state);
+                    self.on.push(state);
                 }
                 winit::event::WindowEvent::RedrawRequested => {
-                    if !window.focused {
+                    let redraw = match window.redraw_policy {
+                        Redraw::FocusOnly => {
+                            if self.current_focus == window_id {
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        Redraw::Always => true,
+                    };
+                    if !redraw {
                         return;
                     }
                     //println!("draw!");
                     let canvas = window.surface.canvas();
                     let window_dim = window.window.inner_size();
-                    let duration = self.app.draw(
-                        window_id,
+                    let duration = (window.draw_fn.0)(
+                        self.app.share_resource(),
                         skip::Horizontal::new(Canvas {
-                            on: &window.on,
-                            mouse_pos: &window.mouse_pos,
-                            key: &window.key,
+                            on: &self.on,
+                            mouse_pos: &self.mouse_pos,
+                            key: &self.key,
                             canvas,
                             paint: &mut self.paint,
                             fonts: &self.fonts,
@@ -497,8 +542,8 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                         .gl_surface
                         .swap_buffers(&window.skia_context)
                         .unwrap();
-                    window.on.clear();
-                    window.key.clear();
+                    self.on.clear();
+                    self.key.clear();
                     if let Some(d) = duration {
                         window.next_redraw = Some(Instant::now() + d);
                     }
@@ -523,13 +568,13 @@ impl<T: UserEvent + 'static, A: AppController<T>> winit::application::Applicatio
                 winit::event::WindowEvent::CloseRequested => {
                     self.windows.remove(&window_id);
                 }
-                winit::event::WindowEvent::Focused(focus) => {
-                    window.focused = focus;
+                winit::event::WindowEvent::Focused(_) => {
+                    self.current_focus = window_id;
                 }
-                winit::event::WindowEvent::CursorMoved { position,.. } => {
+                winit::event::WindowEvent::CursorMoved { position, .. } => {
                     let logical = position.to_logical::<f32>(window.window.scale_factor());
-                    window.mouse_pos = (logical.x, logical.y as f32).into();
-//                    dbg!(logical);
+                    self.mouse_pos = (logical.x, logical.y as f32).into();
+                    //                    dbg!(logical);
                 }
                 _ => (),
             },
