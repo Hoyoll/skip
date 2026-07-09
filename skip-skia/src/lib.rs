@@ -101,25 +101,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
         );
     }
 
-    fn on_div<F: FnMut(&mut skip::DivW, &skip::On)>(&mut self, div: &mut skip::DivW, mut f: F) {
-        let hovered = (self.mouse_pos.x >= div.pos.x)
-            && (self.mouse_pos.y >= div.pos.y)
-            && (self.mouse_pos.x <= (div.pos.x + div.dim.x))
-            && (self.mouse_pos.y <= (div.pos.y + div.dim.y));
-        if hovered {
-            f(div, &skip::On::Hover((self.mouse_pos).into()));
-            for on in self.on {
-                f(div, on)
-            }
-        }
-    }
-    fn key_div<F: FnMut(&mut skip::DivW, &skip::Key)>(&mut self, div: &mut skip::DivW, mut f: F) {
-        for key in self.key {
-            f(div, key);
-        }
-    }
-
-    //    #[inline]
+   //    #[inline]
     fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
         let fonts = &self.fonts[text.font_id];
         let (_, rect) = fonts.measure_str(text.text, None);
@@ -166,29 +148,6 @@ impl<'a> skip::Renderer for Canvas<'a> {
         }
     }
 
-    fn on_img<F: FnMut(&mut skip::ImageW, &skip::On)>(&mut self, img: &mut skip::ImageW, mut f: F) {
-        let hovered = (self.mouse_pos.x >= img.pos.x)
-            && (self.mouse_pos.y >= img.pos.y)
-            && (self.mouse_pos.x <= (img.pos.x + img.dim.x))
-            && (self.mouse_pos.y <= (img.pos.y + img.dim.y));
-        if hovered {
-            f(img, &skip::On::Hover((self.mouse_pos).into()));
-            for on in self.on {
-                f(img, on)
-            }
-        }
-    }
-
-    fn key_img<F: FnMut(&mut skip::ImageW, &skip::Key)>(
-        &mut self,
-        img: &mut skip::ImageW,
-        mut f: F,
-    ) {
-        for key in self.key {
-            f(img, key)
-        }
-    }
-
     fn start_clip(&mut self, dim: &skip::DivW) {
         self.canvas.save();
         let rect = skia_safe::Rect::from_xywh(dim.pos.x, dim.pos.y, dim.dim.x, dim.dim.y);
@@ -199,21 +158,16 @@ impl<'a> skip::Renderer for Canvas<'a> {
         self.canvas.restore();
     }
 
-    fn on_layout<F: FnMut(&mut skip::Layout, &skip::On)>(
-        &mut self,
-        div: &mut skip::Layout,
-        mut f: F,
-    ) {
-        let hovered = (self.mouse_pos.x >= div.pos.x)
-            && (self.mouse_pos.y >= div.pos.y)
-            && (self.mouse_pos.x <= (div.pos.x + div.dim.x))
-            && (self.mouse_pos.y <= (div.pos.y + div.dim.y));
-        if hovered {
-            f(div, &skip::On::Hover((self.mouse_pos).into()));
-            for on in self.on {
-                f(div, on)
-            }
-        }
+    fn mouse_pos(&mut self) -> skip::Vec2<f32> {
+        (self.mouse_pos).into()
+    }
+
+    fn mouse_state(&mut self) -> &Vec<skip::On> {
+        self.on
+    }
+
+    fn key_state(&mut self) -> &Vec<skip::Key> {
+        self.key
     }
 }
 

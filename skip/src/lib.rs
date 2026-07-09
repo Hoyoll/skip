@@ -144,11 +144,42 @@ impl<'skip, R: Renderer> Horizontal<R> {
         }
         self
     }
+    
+    pub fn hover<F: FnMut(Vec2<f32>) -> FO, FO: FnMut(Self) -> Self>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let hovered = (mouse_pos.x >= self.layout.pos.x)
+            && (mouse_pos.y >= self.layout.pos.y)
+            && (mouse_pos.x <= (self.layout.pos.x + self.layout.dim.x))
+            && (mouse_pos.y <= (self.layout.pos.y + self.layout.dim.y));
+        if hovered {
+           return f(mouse_pos)(self); 
+        }
+        self 
+    }
+
+    pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let mouse = self.renderer.mouse_state(); 
+        let hovered = (mouse_pos.x >= self.layout.pos.x)
+            && (mouse_pos.y >= self.layout.pos.y)
+            && (mouse_pos.x <= (self.layout.pos.x + self.layout.dim.x))
+            && (mouse_pos.y <= (self.layout.pos.y + self.layout.dim.y));
+        if !hovered {
+            return self;
+        }
+        for on in mouse {
+           f(on);
+        }
+        self
+    }
 
     #[inline]
-    pub fn on<F: FnMut(&mut Layout, &On)>(mut self, f: F) -> Self {
-        self.renderer.on_layout(&mut self.layout, f);
-        self
+    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
+        let keys = self.renderer.key_state();  
+        for on in keys {
+           f(on);
+        }
+        self 
     }
 }
 
@@ -234,11 +265,42 @@ impl<'skip, R: Renderer> Vertical<R> {
         }
         self
     }
+    
+    pub fn hover<F: FnMut(Vec2<f32>) -> FO, FO: FnMut(Self) -> Self>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let hovered = (mouse_pos.x >= self.layout.pos.x)
+            && (mouse_pos.y >= self.layout.pos.y)
+            && (mouse_pos.x <= (self.layout.pos.x + self.layout.dim.x))
+            && (mouse_pos.y <= (self.layout.pos.y + self.layout.dim.y));
+        if hovered {
+           return f(mouse_pos)(self); 
+        }
+        self 
+    }
+
+    pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let mouse = self.renderer.mouse_state(); 
+        let hovered = (mouse_pos.x >= self.layout.pos.x)
+            && (mouse_pos.y >= self.layout.pos.y)
+            && (mouse_pos.x <= (self.layout.pos.x + self.layout.dim.x))
+            && (mouse_pos.y <= (self.layout.pos.y + self.layout.dim.y));
+        if !hovered {
+            return self;
+        }
+        for on in mouse {
+           f(on);
+        }
+        self
+    }
 
     #[inline]
-    pub fn on<F: FnMut(&mut Layout, &On)>(mut self, f: F) -> Self {
-        self.renderer.on_layout(&mut self.layout, f);
-        self
+    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
+        let keys = self.renderer.key_state();  
+        for on in keys {
+           f(on);
+        }
+        self 
     }
 }
 
@@ -326,6 +388,51 @@ impl<'skip, R: Renderer> Image<R> {
         self.renderer = w.renderer();
         self
     }
+
+    
+    pub fn hover<F: FnMut(Vec2<f32>) -> FO, FO: FnMut(Self) -> Self>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let hovered = (mouse_pos.x >= self.widget.pos.x)
+            && (mouse_pos.y >= self.widget.pos.y)
+            && (mouse_pos.x <= (self.widget.pos.x + self.widget.dim.x))
+            && (mouse_pos.y <= (self.widget.pos.y + self.widget.dim.y));
+        if hovered {
+           return f(mouse_pos)(self); 
+        }
+        self 
+    }
+
+    pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let mouse = self.renderer.mouse_state(); 
+        let hovered = (mouse_pos.x >= self.widget.pos.x)
+            && (mouse_pos.y >= self.widget.pos.y)
+            && (mouse_pos.x <= (self.widget.pos.x + self.widget.dim.x))
+            && (mouse_pos.y <= (self.widget.pos.y + self.widget.dim.y));
+        if !hovered {
+            return self;
+        }
+        for on in mouse {
+           f(on);
+        }
+        self
+    }
+
+    #[inline]
+    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
+        let keys = self.renderer.key_state();  
+        for on in keys {
+           f(on);
+        }
+        self 
+    }
+    
+    pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
+        let pos = pos.into();
+        self.widget.pos.x += pos.x;
+        self.widget.pos.y += pos.y;
+        self
+    }
 }
 
 impl<'skip, R: Renderer> Div<R> {
@@ -340,6 +447,13 @@ impl<'skip, R: Renderer> Div<R> {
             self.renderer,
         ));
         self.renderer = w.renderer();
+        self
+    }
+
+    pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
+        let pos = pos.into();
+        self.widget.pos.x += pos.x;
+        self.widget.pos.y += pos.y;
         self
     }
 
@@ -367,16 +481,41 @@ impl<'skip, R: Renderer> Div<R> {
         self
     }
 
-    #[inline]
-    pub fn on<F: FnMut(&mut DivW, &On)>(mut self, f: F) -> Self {
-        self.renderer.on_div(&mut self.widget, f);
+    pub fn hover<F: FnMut(Vec2<f32>) -> FO, FO: FnMut(Self) -> Self>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let hovered = (mouse_pos.x >= self.widget.pos.x)
+            && (mouse_pos.y >= self.widget.pos.y)
+            && (mouse_pos.x <= (self.widget.pos.x + self.widget.dim.x))
+            && (mouse_pos.y <= (self.widget.pos.y + self.widget.dim.y));
+        if hovered {
+           return f(mouse_pos)(self); 
+        }
+        self 
+    }
+
+    pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let mouse = self.renderer.mouse_state(); 
+        let hovered = (mouse_pos.x >= self.widget.pos.x)
+            && (mouse_pos.y >= self.widget.pos.y)
+            && (mouse_pos.x <= (self.widget.pos.x + self.widget.dim.x))
+            && (mouse_pos.y <= (self.widget.pos.y + self.widget.dim.y));
+        if !hovered {
+            return self;
+        }
+        for on in mouse {
+           f(on);
+        }
         self
     }
 
     #[inline]
-    pub fn key<F: FnMut(&mut DivW, &Key)>(mut self, f: F) -> Self {
-        self.renderer.key_div(&mut self.widget, f);
-        self
+    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
+        let keys = self.renderer.key_state();  
+        for on in keys {
+           f(on);
+        }
+        self 
     }
 
     #[inline]
@@ -450,6 +589,12 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self
     }
 
+    pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
+        let pos = pos.into();
+        self.widget.pos.x += pos.x;
+        self.widget.pos.y += pos.y;
+        self
+    }
     #[inline]
     pub fn text(mut self, text: &'skip str) -> Self {
         self.widget.text = text;
@@ -484,8 +629,9 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self,
         proc: PA,
     ) -> Out {
-        let mut pa = proc.into();
+        let mut pa = proc.into(); 
         pa.proc.consume(self, pa.arg)
+        
     }
 }
 
@@ -493,15 +639,13 @@ pub trait Renderer {
     fn render_text<'skip>(&mut self, text: &TextW<'skip>);
     fn render_div(&mut self, div: &DivW);
     fn render_img(&mut self, img: &ImageW);
-    fn on_img<F: FnMut(&mut ImageW, &On)>(&mut self, img: &mut ImageW, f: F);
-    fn on_div<F: FnMut(&mut DivW, &On)>(&mut self, div: &mut DivW, f: F);
-    fn on_layout<F: FnMut(&mut Layout, &On)>(&mut self, div: &mut Layout, f: F);
-    fn key_div<F: FnMut(&mut DivW, &Key)>(&mut self, div: &mut DivW, f: F);
-    fn key_img<F: FnMut(&mut ImageW, &Key)>(&mut self, img: &mut ImageW, f: F);
     fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
     fn start_clip(&mut self, dim: &DivW);
+    fn mouse_pos(&mut self) -> Vec2<f32>;
+    fn mouse_state(&mut self) -> &Vec<On>;
+    fn key_state(&mut self) -> &Vec<Key>;
     fn end_clip(&mut self);
-}
+} 
 
 pub trait Proc<'skip, In: Widget<'skip, R>, Out: Widget<'skip, R>, R: Renderer, Arg> {
     fn consume(&mut self, widget: In, argv: Arg) -> Out;
@@ -639,7 +783,6 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Text<'skip, R> {
 pub enum On {
     Press(Mouse),
     Release(Mouse),
-    Hover(Vec2<f32>),
 }
 
 pub enum Mouse {
