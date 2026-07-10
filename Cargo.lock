@@ -314,6 +314,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
+name = "ddm"
+version = "0.1.0"
+dependencies = [
+ "skip",
+ "skip-skia",
+ "winit",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1460,15 +1469,6 @@ dependencies = [
 [[package]]
 name = "skip"
 version = "0.1.0"
-
-[[package]]
-name = "skip-project"
-version = "0.0.1"
-dependencies = [
- "skip",
- "skip-skia",
- "winit",
-]
 
 [[package]]
 name = "skip-skia"

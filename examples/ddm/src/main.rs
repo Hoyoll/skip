@@ -20,24 +20,19 @@ impl App {
     ) -> Option<Duration> {
         ui.gap(50.0).iter(0..10_000, |div: Div<_>, i| {
             div.color((255, 255, 255, 255))
-                .dim((100.0, 50.0))
-                .hover(|s| {
-                    |w| {
-                        w.color((255, 0, 0, 255))
-                        .child(|div: Div<_>| {
-                            div.padding((0.0, 100.0))
-                            .color((0, 255, 0, 255)).render()
-                        })
-                    }
-                })  
+                .size((100.0, 50.0))
+                .hover(|coords, w| {
+                    w.color((255, 0, 0, 255)).rad(50.0).child(|div: Div<_>| {
+                        div.padding((0.0, 100.0)).color((0, 255, 0, 255)).render()
+                    })
+                })
+                .hover(|coords, div| div)
                 .render()
-                .on(|on| {
-                    match on {
-                        On::Press(Mouse::Left) => println!("pressed"),
-                        On::Release(Mouse::Left) => println!("released"),
-                        _ => ()
-                    }
-                })  
+                .on(|on| match on {
+                    On::Press(Mouse::Left) => println!("pressed"),
+                    On::Release(Mouse::Left) => println!("released"),
+                    _ => (),
+                })
         });
         Some(Duration::from_millis(16))
     }

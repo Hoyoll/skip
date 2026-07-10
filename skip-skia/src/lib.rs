@@ -20,7 +20,7 @@ pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'st
     let mut wn = WinitRenderer {
         on: Vec::new(),
         key: Vec::new(),
-        mouse_pos: (0.0,0.0).into(),
+        mouse_pos: (0.0, 0.0).into(),
         current_focus: winit::window::WindowId::dummy(),
         app,
         windows: HashMap::new(),
@@ -81,8 +81,8 @@ pub struct Canvas<'skip> {
 
 impl<'a> skip::Renderer for Canvas<'a> {
     fn render_div(&mut self, div: &skip::DivW) {
-        let right = div.pos.x + div.dim.x;
-        let bottom = div.pos.y + div.dim.y;
+        let right = div.pos.x + div.size.x;
+        let bottom = div.pos.y + div.size.y;
 
         if right <= 0.0
             || bottom <= 0.0
@@ -94,14 +94,14 @@ impl<'a> skip::Renderer for Canvas<'a> {
         self.paint
             .set_argb(div.color.a, div.color.r, div.color.g, div.color.b);
         self.canvas.draw_round_rect(
-            skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.dim.x, div.dim.y),
+            skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.size.x, div.size.y),
             div.rad,
             div.rad,
             self.paint,
         );
     }
 
-   //    #[inline]
+    //    #[inline]
     fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
         let fonts = &self.fonts[text.font_id];
         let (_, rect) = fonts.measure_str(text.text, None);
@@ -123,8 +123,8 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
 
     fn render_img(&mut self, img: &skip::ImageW) {
-        let right = img.pos.x + img.dim.x;
-        let bottom = img.pos.y + img.dim.y;
+        let right = img.pos.x + img.size.x;
+        let bottom = img.pos.y + img.size.y;
 
         if right <= 0.0
             || bottom <= 0.0
@@ -140,7 +140,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
                 self.canvas.draw_image_rect(
                     image,
                     None,
-                    skia_safe::Rect::from_xywh(img.pos.x, img.pos.y, img.dim.x, img.dim.y),
+                    skia_safe::Rect::from_xywh(img.pos.x, img.pos.y, img.size.x, img.size.y),
                     self.paint,
                 );
             }
@@ -150,7 +150,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
 
     fn start_clip(&mut self, dim: &skip::DivW) {
         self.canvas.save();
-        let rect = skia_safe::Rect::from_xywh(dim.pos.x, dim.pos.y, dim.dim.x, dim.dim.y);
+        let rect = skia_safe::Rect::from_xywh(dim.pos.x, dim.pos.y, dim.size.x, dim.size.y);
         let mut path = skia_safe::Path::rect(&rect, None);
         self.canvas.clip_path(&path, None, Some(true));
     }
@@ -477,6 +477,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                     //println!("draw!");
                     let canvas = window.surface.canvas();
                     let window_dim = window.window.inner_size();
+                    canvas.clear(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.0));
                     let duration = (window.draw_fn.0)(
                         self.app.share_resource(),
                         skip::Horizontal::new(Canvas {
