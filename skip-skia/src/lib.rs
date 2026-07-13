@@ -19,7 +19,7 @@ pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'st
             .unwrap();
     let mut wn = WinitRenderer {
         on: Vec::new(),
-        key: Vec::new(),
+//        key: Vec::new(),
         mouse_pos: (0.0, 0.0).into(),
         current_focus: winit::window::WindowId::dummy(),
         app,
@@ -37,12 +37,16 @@ pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'st
 pub trait UserEvent {}
 
 pub struct DrawFn<Shared, T: UserEvent + 'static>(
-    pub  fn(
+    pub fn(
         &mut Shared,
         skip::Horizontal<Canvas>,
         &winit::event_loop::EventLoopProxy<T>,
     ) -> Option<Duration>,
 );
+
+pub struct KeyFn<Shared, T: UserEvent + 'static>(
+    pub fn(&mut Shared, skip::Key, &winit::event_loop::EventLoopProxy<T>)
+    );
 
 pub trait AppController<T: UserEvent, Shared> {
     fn bootstrap<'skip>(&mut self, context: Context<'skip, Shared, T>);
@@ -63,6 +67,7 @@ struct Window<Shared, T: UserEvent + 'static> {
     fb_info: skia_safe::gpu::gl::FramebufferInfo,
     gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
     draw_fn: DrawFn<Shared, T>,
+    key_fn: Option<KeyFn<Shared, T>>,
     next_redraw: Option<Instant>,
     redraw_policy: Redraw,
     //focused: bool,
@@ -71,7 +76,7 @@ struct Window<Shared, T: UserEvent + 'static> {
 pub struct Canvas<'skip> {
     on: &'skip Vec<skip::On>,
     mouse_pos: &'skip skip::Vec2<f32>,
-    key: &'skip Vec<skip::Key>,
+    //key: &'skip Vec<skip::Key>,
     canvas: &'skip skia_safe::Canvas,
     paint: &'skip mut skia_safe::Paint,
     fonts: &'skip Vec<skia_safe::Font>,
@@ -80,6 +85,9 @@ pub struct Canvas<'skip> {
 }
 
 impl<'a> skip::Renderer for Canvas<'a> {
+    fn canvas_size(&mut self) -> skip::Vec2<f32> {
+        (&self.window_dim).into()
+    }
     fn render_div(&mut self, div: &skip::DivW) {
         let right = div.pos.x + div.size.x;
         let bottom = div.pos.y + div.size.y;
@@ -89,8 +97,11 @@ impl<'a> skip::Renderer for Canvas<'a> {
             || div.pos.x >= self.window_dim.x
             || div.pos.y >= self.window_dim.y
         {
+            //println!("skipped!");
             return;
         }
+        //dbg!(div);
+        //println!("draw!");
         self.paint
             .set_argb(div.color.a, div.color.r, div.color.g, div.color.b);
         self.canvas.draw_round_rect(
@@ -165,16 +176,12 @@ impl<'a> skip::Renderer for Canvas<'a> {
     fn mouse_state(&mut self) -> &Vec<skip::On> {
         self.on
     }
-
-    fn key_state(&mut self) -> &Vec<skip::Key> {
-        self.key
-    }
 }
 
 struct WinitRenderer<T: UserEvent + 'static, A: AppController<T, Shared>, Shared> {
     windows: HashMap<winit::window::WindowId, Window<Shared, T>>,
     on: Vec<skip::On>,
-    key: Vec<skip::Key>,
+    //key: Vec<skip::Key>,
     mouse_pos: skip::Vec2<f32>,
     current_focus: winit::window::WindowId,
     proxy: winit::event_loop::EventLoopProxy<T>,
@@ -198,6 +205,7 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
         &mut self,
         attr: winit::window::WindowAttributes,
         draw_fn: DrawFn<Shared, T>,
+        key_fn: Option<KeyFn<Shared, T>>
     ) -> winit::window::WindowId {
         let display_builder = glutin_winit::DisplayBuilder::new()
             .with_window_attributes(Some(attr.with_visible(false)))
@@ -277,6 +285,7 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
                 gl_surface,
                 //focused: false,
                 draw_fn,
+                key_fn,
                 next_redraw: None,
                 redraw_policy: Redraw::FocusOnly,
             },
@@ -293,6 +302,14 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
             window.draw_fn = draw_fn
         }
     }
+
+    pub fn change_key_fn(&mut self, id: &winit::window::WindowId, key_fn: Option<KeyFn<Shared, T>>) {
+        if let Some(window) = self.windows.get_mut(id) {
+            window.key_fn = key_fn
+        }
+    }
+
+
 
     pub fn new_font(
         &mut self,
@@ -433,18 +450,21 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
             None => (),
             Some(window) => match event {
                 winit::event::WindowEvent::KeyboardInput { event, .. } => {
-                    match event.physical_key {
+                    let key = match event.physical_key {
                         winit::keyboard::PhysicalKey::Code(c) => {
                             let key = keycode_to_str(c);
                             let skip_key = match event.state {
                                 winit::event::ElementState::Pressed => skip::Key::Press(key),
                                 winit::event::ElementState::Released => skip::Key::Release(key),
                             };
-                            self.key.push(skip_key);
+                            skip_key
                         }
                         winit::keyboard::PhysicalKey::Unidentified(_) => {
-                            self.key.push(skip::Key::Press("Unknown"));
+                            skip::Key::Press("Unknown")
                         }
+                    };
+                    if let Some(key_fn) = &window.key_fn {
+                        (key_fn.0)(self.app.share_resource(), key, &self.proxy);
                     }
                 }
                 winit::event::WindowEvent::MouseInput { state, button, .. } => {
@@ -474,16 +494,15 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                     if !redraw {
                         return;
                     }
-                    //println!("draw!");
                     let canvas = window.surface.canvas();
                     let window_dim = window.window.inner_size();
-                    canvas.clear(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.0));
+                    canvas.clear(skia_safe::Color::WHITE); 
                     let duration = (window.draw_fn.0)(
                         self.app.share_resource(),
                         skip::Horizontal::new(Canvas {
                             on: &self.on,
                             mouse_pos: &self.mouse_pos,
-                            key: &self.key,
+                            //key: &self.key,
                             canvas,
                             paint: &mut self.paint,
                             fonts: &self.fonts,
@@ -493,12 +512,13 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                         &self.proxy,
                     );
                     window.dr_context.flush_and_submit();
+                    //window.dr_context.flush_and_submit_surface(&mut window.surface, None);
                     window
                         .gl_surface
                         .swap_buffers(&window.skia_context)
                         .unwrap();
                     self.on.clear();
-                    self.key.clear();
+//                    self.key.clear();
                     if let Some(d) = duration {
                         window.next_redraw = Some(Instant::now() + d);
                     }
@@ -519,6 +539,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                         None,
                     )
                     .unwrap();
+        
                 }
                 winit::event::WindowEvent::CloseRequested => {
                     self.windows.remove(&window_id);

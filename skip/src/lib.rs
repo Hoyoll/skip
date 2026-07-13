@@ -1,10 +1,14 @@
 use std::marker::PhantomData;
 
+#[derive(Debug)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
     pub b: u8,
     pub a: u8,
+}
+
+pub struct Circle {
 }
 
 pub struct Image<R: Renderer> {
@@ -40,6 +44,7 @@ pub struct Div<R: Renderer> {
     renderer: R,
 }
 
+#[derive(Debug)]
 pub struct DivW {
     pub size: Vec2<f32>,
     pub rad: f32,
@@ -48,7 +53,7 @@ pub struct DivW {
 }
 
 pub struct Layout {
-    pub offset: f32,
+    pub offset: Vec2<f32>,
     pub pos: Vec2<f32>,
     pub size: Vec2<f32>,
     pub gap: f32,
@@ -69,7 +74,7 @@ impl<'skip, R: Renderer> Horizontal<R> {
     pub fn new(renderer: R) -> Self {
         Self {
             layout: Layout {
-                offset: 0.0,
+                offset: ().into(),
                 pos: ().into(),
                 size: ().into(),
                 gap: 0.0,
@@ -83,15 +88,15 @@ impl<'skip, R: Renderer> Horizontal<R> {
         mut self,
         mut f: F,
     ) -> Self {
-        self.layout.offset += self.layout.gap;
         let mut w = f(W::inherit(
             (0.0, 0.0),
-            (self.layout.pos.x + self.layout.offset, self.layout.pos.y),
+            (self.layout.pos.x + self.layout.offset.x, self.layout.pos.y),
             self.renderer,
         ));
         let size = w.size();
-        self.layout.offset += size.x;
+        self.layout.offset.x += size.x;
         self.renderer = w.renderer();
+        self.layout.offset.x += self.layout.gap;
         self
     }
 
@@ -123,30 +128,6 @@ impl<'skip, R: Renderer> Horizontal<R> {
         pa.proc.consume(self, pa.arg)
     }
 
-    #[inline]
-    pub fn iter<Iter: Iterator, F: FnMut(W, Iter::Item) -> W, W: Widget<'skip, R>>(
-        mut self,
-        mut items: Iter,
-        mut f: F,
-    ) -> Self {
-        let mut w;
-        for item in items.by_ref() {
-            self.layout.offset += self.layout.gap;
-            w = f(
-                W::inherit(
-                    (0.0, 0.0),
-                    (self.layout.pos.x + self.layout.offset, self.layout.pos.y),
-                    self.renderer,
-                ),
-                item,
-            );
-            let size = w.size();
-            self.layout.offset += size.x;
-            self.renderer = w.renderer();
-        }
-        self
-    }
-
     pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let mouse = self.renderer.mouse_state();
@@ -164,14 +145,6 @@ impl<'skip, R: Renderer> Horizontal<R> {
     }
 
     #[inline]
-    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
-        let keys = self.renderer.key_state();
-        for on in keys {
-            f(on);
-        }
-        self
-    }
-
     pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.layout.pos.x)
@@ -182,6 +155,81 @@ impl<'skip, R: Renderer> Horizontal<R> {
             return f(mouse_pos, self);
         }
         self
+    }
+
+    pub fn canvas_size(&mut self) -> Vec2<f32> {
+        self.renderer.canvas_size()
+    }
+
+
+    #[inline]
+    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> W, W: Widget<'skip, R>>(
+        mut self,
+        mut items: I,
+        mut f: F,
+    ) -> Self {
+        let mut w;
+        let mut iter_arg = items.into();
+        match iter_arg.column {
+            None => {
+                for item in iter_arg.items.by_ref() {
+                    w = f(
+                        W::inherit(
+                        (0.0, 0.0),
+                        (self.layout.pos.x + self.layout.offset.x, self.layout.pos.y),
+                        self.renderer,
+                        ),
+                    item,
+                    );
+                    let size = w.size();
+                    self.layout.offset.x += size.x;
+                    self.renderer = w.renderer();
+                    self.layout.offset.x += self.layout.gap;
+                }
+            }
+            Some(column) => {
+                let mut limit: usize = 0;
+                for item in iter_arg.items.by_ref() {                    
+                    w = f(
+                        W::inherit(
+                        (0.0, 0.0),
+                        (self.layout.pos.x + self.layout.offset.x, self.layout.pos.y + self.layout.offset.y),
+                        self.renderer,
+                        ),
+                    item,
+                    );
+                    let size = w.size();
+                    self.layout.offset.x += size.x;
+                    self.renderer = w.renderer();
+                    self.layout.offset.x += self.layout.gap;
+                    limit += 1;
+                    if column == limit {
+                        limit = 0;
+                        self.layout.offset.x = 0.0;
+                        self.layout.offset.y += size.y + self.layout.gap;
+                    }
+                }
+            }
+        }
+        self
+    }
+}
+
+struct IterArg<Iter: Iterator> {
+    pub items: Iter,
+    pub column: Option<usize>
+}
+
+impl<Iter: Iterator> From<(Iter, usize)> for IterArg<Iter> {
+    #[inline]
+    fn from(value: (Iter, usize)) -> Self {
+        Self { items: value.0, column: Some(value.1) }
+    }
+}
+
+impl<Iter: Iterator> From<(Iter)> for IterArg<Iter> {
+    fn from(value: (Iter)) -> Self {
+        Self { items: value, column: None }
     }
 }
 
@@ -190,7 +238,7 @@ impl<'skip, R: Renderer> Vertical<R> {
     pub fn new(renderer: R) -> Self {
         Self {
             layout: Layout {
-                offset: 0.0,
+                offset: ().into(),
                 size: ().into(),
                 pos: ().into(),
                 gap: 0.0,
@@ -204,15 +252,15 @@ impl<'skip, R: Renderer> Vertical<R> {
         mut self,
         mut f: F,
     ) -> Self {
-        self.layout.offset += self.layout.gap;
         let mut w = f(W::inherit(
             (0.0, 0.0),
-            (self.layout.pos.x, self.layout.pos.y + self.layout.offset),
+            (self.layout.pos.x, self.layout.pos.y + self.layout.offset.y),
             self.renderer,
         ));
         let size = w.size();
-        self.layout.offset += size.y;
+        self.layout.offset.y += size.y;
         self.renderer = w.renderer();
+        self.layout.offset.y += self.layout.gap;
         self
     }
 
@@ -245,29 +293,56 @@ impl<'skip, R: Renderer> Vertical<R> {
     }
 
     #[inline]
-    pub fn iter<Iter: Iterator, F: FnMut(W, Iter::Item) -> W, W: Widget<'skip, R>>(
+    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> W, W: Widget<'skip, R>>(
         mut self,
-        mut items: Iter,
+        mut items: I,
         mut f: F,
     ) -> Self {
         let mut w;
-        for item in items.by_ref() {
-            self.layout.offset += self.layout.gap;
-            w = f(
-                W::inherit(
-                    (0.0, 0.0),
-                    (self.layout.pos.x, self.layout.pos.y + self.layout.offset),
-                    self.renderer,
-                ),
-                item,
-            );
-            let size = w.size();
-            self.layout.offset += size.y;
-            self.renderer = w.renderer();
+        let mut iter_arg = items.into();
+        match iter_arg.column {
+            None => {
+                for item in iter_arg.items.by_ref() {
+                    w = f(
+                        W::inherit(
+                        (0.0, 0.0),
+                        (self.layout.pos.x, self.layout.pos.y + self.layout.offset.y),
+                        self.renderer,
+                        ),
+                    item,
+                    );
+                    let size = w.size();
+                    self.layout.offset.y += size.y;
+                    self.renderer = w.renderer();
+                    self.layout.offset.y += self.layout.gap;
+                }
+            }
+            Some(column) => {
+                let mut limit: usize = 0;
+                for item in iter_arg.items.by_ref() {                    
+                    w = f(
+                        W::inherit(
+                        (0.0, 0.0),
+                        (self.layout.pos.x + self.layout.offset.x, self.layout.pos.y + self.layout.offset.y),
+                        self.renderer,
+                        ),
+                    item,
+                    );
+                    let size = w.size();
+                    self.layout.offset.y += size.y;
+                    self.renderer = w.renderer();
+                    self.layout.offset.y += self.layout.gap;
+                    limit += 1;
+                    if column == limit {
+                        limit = 0;
+                        self.layout.offset.y = 0.0;
+                        self.layout.offset.x += size.x + self.layout.gap;
+                    }
+                }
+            }
         }
         self
     }
-
     pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let mouse = self.renderer.mouse_state();
@@ -285,14 +360,6 @@ impl<'skip, R: Renderer> Vertical<R> {
     }
 
     #[inline]
-    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
-        let keys = self.renderer.key_state();
-        for on in keys {
-            f(on);
-        }
-        self
-    }
-
     pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.layout.pos.x)
@@ -303,6 +370,10 @@ impl<'skip, R: Renderer> Vertical<R> {
             return f(mouse_pos, self);
         }
         self
+    }
+
+    pub fn canvas_size(&mut self) -> Vec2<f32> {
+        self.renderer.canvas_size()
     }
 }
 
@@ -366,7 +437,7 @@ impl<'skip, R: Renderer> Image<R> {
         let w = f(Horizontal {
             layout: Layout {
                 pos: (&self.widget.pos).into(),
-                offset: 0.0,
+                offset: ().into(),
                 size: (&self.widget.size).into(),
                 gap: 0.0,
             },
@@ -381,7 +452,7 @@ impl<'skip, R: Renderer> Image<R> {
         let w = f(Vertical {
             layout: Layout {
                 pos: (&self.widget.pos).into(),
-                offset: 0.0,
+                offset: ().into(),
                 size: (&self.widget.size).into(),
                 gap: 0.0,
             },
@@ -420,14 +491,6 @@ impl<'skip, R: Renderer> Image<R> {
     }
 
     #[inline]
-    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
-        let keys = self.renderer.key_state();
-        for on in keys {
-            f(on);
-        }
-        self
-    }
-
     pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
         let pos = pos.into();
         self.widget.pos.x += pos.x;
@@ -451,6 +514,7 @@ impl<'skip, R: Renderer> Div<R> {
         self
     }
 
+    #[inline]
     pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
         let pos = pos.into();
         self.widget.pos.x += pos.x;
@@ -482,11 +546,13 @@ impl<'skip, R: Renderer> Div<R> {
         self
     }
 
+    #[inline]
     pub fn rad(mut self, rad: f32) -> Self {
         self.widget.rad = rad;
         self
     }
 
+    #[inline]
     pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.widget.pos.x)
@@ -516,15 +582,6 @@ impl<'skip, R: Renderer> Div<R> {
     }
 
     #[inline]
-    pub fn key<F: FnMut(&Key)>(mut self, mut f: F) -> Self {
-        let keys = self.renderer.key_state();
-        for on in keys {
-            f(on);
-        }
-        self
-    }
-
-    #[inline]
     pub fn proc<
         PA: Into<ProcArg<'skip, P, Self, Out, R, Arg>>,
         P: Proc<'skip, Self, Out, R, Arg>,
@@ -546,7 +603,7 @@ impl<'skip, R: Renderer> Div<R> {
         let w = f(Horizontal {
             layout: Layout {
                 pos: (&self.widget.pos).into(),
-                offset: 0.0,
+                offset: ().into(),
                 size: (&self.widget.size).into(),
                 gap: 0.0,
             },
@@ -561,7 +618,7 @@ impl<'skip, R: Renderer> Div<R> {
         let w = f(Vertical {
             layout: Layout {
                 pos: (&self.widget.pos).into(),
-                offset: 0.0,
+                offset: ().into(),
                 size: (&self.widget.size).into(),
                 gap: 0.0,
             },
@@ -585,6 +642,10 @@ impl<'skip, R: Renderer> Div<R> {
         self.renderer = w.renderer();
         self.renderer.end_clip();
         self
+    }
+
+    pub fn canvas_size(&mut self) -> Vec2<f32> {
+        self.renderer.canvas_size()
     }
 }
 
@@ -638,6 +699,10 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
     }
+
+    pub fn canvas_size(&mut self) -> Vec2<f32> {
+        self.renderer.canvas_size()
+    }
 }
 
 pub trait Renderer {
@@ -648,8 +713,8 @@ pub trait Renderer {
     fn start_clip(&mut self, dim: &DivW);
     fn mouse_pos(&mut self) -> Vec2<f32>;
     fn mouse_state(&mut self) -> &Vec<On>;
-    fn key_state(&mut self) -> &Vec<Key>;
     fn end_clip(&mut self);
+    fn canvas_size(&mut self) -> Vec2<f32>;
 }
 
 pub trait Proc<'skip, In: Widget<'skip, R>, Out: Widget<'skip, R>, R: Renderer, Arg> {
@@ -711,7 +776,7 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Horizontal<R> {
         //let p = pos.into();
         Self {
             layout: Layout {
-                offset: 0.0,
+                offset: ().into(),
                 pos: pos.into(),
                 size: dim.into(),
                 gap: 0.0,
@@ -736,7 +801,7 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Vertical<R> {
         //let p = pos.into();
         Self {
             layout: Layout {
-                offset: 0.0,
+                offset: ().into(),
                 pos: pos.into(),
                 size: dim.into(),
                 gap: 0.0,
@@ -801,7 +866,7 @@ pub enum Key {
     Press(&'static str),
     Release(&'static str),
 }
-
+#[derive(Debug)]
 pub struct Vec2<T> {
     pub x: T,
     pub y: T,

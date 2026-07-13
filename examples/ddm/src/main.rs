@@ -11,28 +11,42 @@ struct App {
     main_window: winit::window::WindowId,
     shared: SharedRes,
 }
+enum Color {
+    Background,
+    UiBg
+}
 
+impl From<Color> for skip::Color {
+    #[inline]
+    fn from(value: Color) -> Self {
+        match value {
+            Color::Background => (16, 20, 28, 1).into(),
+            Color::UiBg => (20, 24, 33, 1).into()
+        }
+    }
+}
 impl App {
     fn draw(
         shared: &mut SharedRes,
-        ui: skip::Horizontal<skip_skia::Canvas>,
+        mut ui: skip::Horizontal<skip_skia::Canvas>,
         proxy: &winit::event_loop::EventLoopProxy<Message>,
     ) -> Option<Duration> {
-        ui.gap(50.0).iter(0..10_000, |div: Div<_>, i| {
-            div.color((255, 255, 255, 255))
-                .size((100.0, 50.0))
-                .hover(|coords, w| {
-                    w.color((255, 0, 0, 255)).rad(50.0).child(|div: Div<_>| {
-                        div.padding((0.0, 100.0)).color((0, 255, 0, 255)).render()
-                    })
+        let win = ui.canvas_size();
+        ui.add(|background: Div<_>| {
+            background
+            .size((&win))
+            .color(Color::Background)
+            .render()
+            .horizontal(|layout| { 
+                layout
+                .gap(5.0)
+                .iter((0..10, 3), |button: Div<_>, _| {
+                    button
+                    .color(Color::UiBg)
+                    .size((100.0, 50.0))
+                    .render()
                 })
-                .hover(|coords, div| div)
-                .render()
-                .on(|on| match on {
-                    On::Press(Mouse::Left) => println!("pressed"),
-                    On::Release(Mouse::Left) => println!("released"),
-                    _ => (),
-                })
+            })
         });
         Some(Duration::from_millis(16))
     }
@@ -45,7 +59,8 @@ impl AppController<Message, SharedRes> for App {
         self.main_window = context.new_window(
             winit::window::WindowAttributes::default(),
             DrawFn(App::draw),
-        );
+            None,
+            );
         context.set_visible(&self.main_window, true);
     }
     fn user_event<'skip>(
