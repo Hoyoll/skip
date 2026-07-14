@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Div, Font, Horizontal, Text};
+use skip::{Div, Font, Horizontal, Mouse, On, State, Text};
 use skip_skia::{AppController, Canvas, DrawFn, UserEvent};
 use winit::{event_loop::EventLoopProxy, window::WindowAttributes};
 
@@ -35,6 +35,19 @@ struct Calc {
 
 const FIRA_CODE: &[u8] = include_bytes!("../assets/fonts/fira_code.ttf");
 
+enum Button {
+    Number(&'static str),
+    Operand(&'static str),
+    Action(&'static str)
+}
+
+const BUTTONS: [Button; 16] = [
+    Button::Number("1"), Button::Number("2"), Button::Number("3"), Button::Operand("+"),
+    Button::Number("4"), Button::Number("5"), Button::Number("6"), Button::Operand("-"),
+    Button::Number("7"), Button::Number("8"), Button::Number("9"), Button::Operand("*"),
+    Button::Action("_"), Button::Number("0"),Button::Action("="), Button::Operand(":")
+];
+
 impl Calc {
     fn main_window(context: &mut Context, mut ui: Horizontal<Canvas>, proxy: &EventLoopProxy<Message>) -> Option<Duration> {
         let win = ui.canvas_size();
@@ -48,7 +61,7 @@ impl Calc {
             .render()
             .vertical(|layout| {
                 layout
-                .padding((gap, 0.0))
+                .padding((gap / 2.0, 0.0))
                 .gap(gap)
                 .add(|text_box: Div<_>| {
                     text_box
@@ -56,38 +69,45 @@ impl Calc {
                     .color(Color::UiBg)
                     .render()
                 })
-                .add(|layout: Horizontal<_>| { 
+                .add(|layout: skip::Horizontal<_>| {
                     layout
                     .gap(gap)
-                    .iter((
-                        [
-                        "1", "2", "3","+", 
-                        "4", "5", "6", "-", 
-                        "7", "8", "9", ":",
-                        "", "0", "=", "*"
-                        ].iter(), 4), 
-                        |button: Div<_>, number| {
+                    .iter((BUTTONS.iter(), 4), |button: Div<_>, btn| {
                         button
                         .color(Color::UiBg)
                         .size((width, height))
-                        .hover(|_, button| {
-                            button.child(|background: Div<Canvas<'_>>| {
-                                background
-                                .padding((-gap, -gap))
-                                .size((width + gap * 2.0, height + gap * 2.0))
-                                .color(Color::Light)
-                                .render()
-                            })
-                        })      
                         .render()
+                        .on(|on| {
+                           match on {
+                               (Mouse::Left, State::Pressed) => (),
+                                _ => ()
+                           } 
+                        })
                         .child(|label: Text<_>| {
-                            let pad_x = (width / 2.0) - (width / 15.0);
-                            let pad_y = height / 2.0 + (height / 10.0);
+                            let (pad, text) = match btn {
+                                Button::Number(n) => {
+                                    let pad_x = (width / 2.0) - (width / 15.0);
+                                    let pad_y = height / 2.0 + (height / 10.0);
+                            
+                                    ((pad_x, pad_y), n)
+                                },
+                                Button::Operand(op) => {        
+                                    let pad_x = (width / 2.0) - (width / 15.0);
+                                    let pad_y = height / 2.0 + (height / 10.0);
+                            
+                                    ((pad_x, pad_y), op)
+                                },
+                                Button::Action(ac) => {
+                                    let pad_x = (width / 2.0) - (width / 15.0);
+                                    let pad_y = height / 2.0 + (height / 10.0); 
+                                    ((pad_x, pad_y), ac)
+                                }
+                            };
                             label
-                            .padding((pad_x, pad_y))
+                            .padding(pad)
                             .color(Color::Fg)
                             .font_id(context.fira_code)
-                            .text(*number)
+                            .text(*text)
                             .render()
                         })
                     })

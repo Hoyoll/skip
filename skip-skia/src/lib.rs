@@ -475,10 +475,10 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                         _ => skip::Mouse::Unknown,
                     };
                     let state = match state {
-                        winit::event::ElementState::Pressed => skip::On::Press(button),
-                        winit::event::ElementState::Released => skip::On::Release(button),
+                        winit::event::ElementState::Pressed => skip::State::Pressed,
+                        winit::event::ElementState::Released => skip::State::Released,
                     };
-                    self.on.push(state);
+                    self.on.push((button, state));
                 }
                 winit::event::WindowEvent::RedrawRequested => {
                     let redraw = match window.redraw_policy {
