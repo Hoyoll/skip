@@ -7,3 +7,4 @@ edition = "2024"
 winit.workspace = true
 skip.workspace = true
 skip-skia.workspace = true
+meval = "0.2.0"

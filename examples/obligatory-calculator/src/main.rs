@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Div, Font, Horizontal, Mouse, On, State, Text};
+use skip::{Circle, Div, Font, Horizontal, Mouse, On, Proc, State, Text};
 use skip_skia::{AppController, Canvas, DrawFn, UserEvent};
 use winit::{event_loop::EventLoopProxy, window::WindowAttributes};
 
@@ -14,6 +14,18 @@ enum Color {
 impl From<Color> for skip::Color {
     #[inline]
     fn from(value: Color) -> Self {
+        match value {
+            Color::Background => (16, 20, 28, 255).into(),
+            Color::UiBg => (20, 24, 33, 255).into(),
+            Color::Fg => (90, 99, 120, 255).into(),
+            Color::Light => (191, 189, 182, 255).into()
+        }
+    }
+}
+
+impl From<&Color> for skip::Color {
+    #[inline]
+    fn from(value: &Color) -> Self {
         match value {
             Color::Background => (16, 20, 28, 255).into(),
             Color::UiBg => (20, 24, 33, 255).into(),
@@ -45,8 +57,49 @@ const BUTTONS: [Button; 16] = [
     Button::Number("1"), Button::Number("2"), Button::Number("3"), Button::Operand("+"),
     Button::Number("4"), Button::Number("5"), Button::Number("6"), Button::Operand("-"),
     Button::Number("7"), Button::Number("8"), Button::Number("9"), Button::Operand("*"),
-    Button::Action("_"), Button::Number("0"),Button::Action("="), Button::Operand(":")
+    Button::Action("_"), Button::Number("0"),Button::Action("="), Button::Operand("/")
 ];
+
+struct TextInput {
+    pub text: String,
+}
+
+impl TextInput {
+    pub fn accept(&mut self, button: &Button) {
+        match button {
+            Button::Number(num) | Button::Operand(num) => {
+                self.text.push_str(num);
+            },
+            Button::Action("=") => {
+                match meval::eval_str(&self.text) {
+                    Ok(val) => {
+                        self.text = val.to_string();
+                    },
+                    Err(_) => {}
+                }
+            },
+            Button::Action("_") => {
+                self.text.clear();
+            },
+            _ => ()
+        }
+    }
+}
+
+impl<'skip> Proc<'skip, Div<Canvas<'skip>>, Canvas<'skip>, Font> for &mut TextInput {
+    fn consume(&mut self, widget: Div<Canvas<'skip>>, argv: Font) -> Div<Canvas<'skip>> {
+        widget
+        .render()
+        .child(|text: Text<_>| {
+            text
+            .padding((0.0, 40.0))
+            .font_id(argv)
+            .color(Color::Light)
+            .text(&self.text)
+            .render()
+        })
+    }
+}
 
 impl Calc {
     fn main_window(context: &mut Context, mut ui: Horizontal<Canvas>, proxy: &EventLoopProxy<Message>) -> Option<Duration> {
@@ -56,9 +109,19 @@ impl Calc {
         let width = win.x / 4.0 - gap;
         ui.add(|background: Div<_>| {
             background
-            .size((&win))
+            .size(&win)
             .color(Color::Background)
             .render()
+            .hover(|pos, background| {
+                background
+                .child(|circle: Circle<_>| {
+                    circle
+                    .pos(&pos)
+                    .radius(height / 2.0)
+                    .color(Color::Light)
+                    .render()
+                })
+            })
             .vertical(|layout| {
                 layout
                 .padding((gap / 2.0, 0.0))
@@ -67,45 +130,45 @@ impl Calc {
                     text_box
                     .size((win.x - gap, height))
                     .color(Color::UiBg)
-                    .render()
+                    .proc((&mut context.text_input, context.fira_code))
                 })
                 .add(|layout: skip::Horizontal<_>| {
                     layout
                     .gap(gap)
                     .iter((BUTTONS.iter(), 4), |button: Div<_>, btn| {
+                        let mut text_color = Color::Fg;
                         button
                         .color(Color::UiBg)
                         .size((width, height))
                         .render()
                         .on(|on| {
                            match on {
-                               (Mouse::Left, State::Pressed) => (),
+                               (Mouse::Left, State::Pressed) => context.text_input.accept(btn),
                                 _ => ()
                            } 
                         })
+                        .hover(|_,div| {
+                            text_color = Color::Light;
+                            div
+                        })  
                         .child(|label: Text<_>| {
-                            let (pad, text) = match btn {
+                            let pad_x = (width / 2.0) - (width / 15.0);
+                            let pad_y = height / 2.0 + (height / 10.0); 
+                            let pad = (pad_x,pad_y);
+                            let text = match btn {
                                 Button::Number(n) => {
-                                    let pad_x = (width / 2.0) - (width / 15.0);
-                                    let pad_y = height / 2.0 + (height / 10.0);
-                            
-                                    ((pad_x, pad_y), n)
+                                    n
                                 },
                                 Button::Operand(op) => {        
-                                    let pad_x = (width / 2.0) - (width / 15.0);
-                                    let pad_y = height / 2.0 + (height / 10.0);
-                            
-                                    ((pad_x, pad_y), op)
+                                    op
                                 },
                                 Button::Action(ac) => {
-                                    let pad_x = (width / 2.0) - (width / 15.0);
-                                    let pad_y = height / 2.0 + (height / 10.0); 
-                                    ((pad_x, pad_y), ac)
+                                    ac
                                 }
                             };
                             label
                             .padding(pad)
-                            .color(Color::Fg)
+                            .color(&text_color)
                             .font_id(context.fira_code)
                             .text(*text)
                             .render()
@@ -121,6 +184,7 @@ impl Calc {
 struct Context {
     title: String,
     fira_code: Font,
+    text_input: TextInput,
 }
 
 impl AppController<Message, Context> for Calc {
@@ -143,7 +207,8 @@ impl AppController<Message, Context> for Calc {
 fn main() {
     let calc = Calc { context: Context {
         title: String::from("Calculator!"),
-        fira_code: Font::default()
+        fira_code: Font::default(),
+        text_input: TextInput { text: String::new() }
     } };
     skip_skia::run_app(calc);
     //println!("Hello, world!");

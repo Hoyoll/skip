@@ -59,6 +59,32 @@ pub enum Redraw {
     Always,
 }
 
+enum WinCount<Shared, T: UserEvent + 'static> {
+    One(Window<Shared, T>),
+    Multi(HashMap<winit::window::WindowId, Window<Shared, T>>),
+    None
+}
+
+impl<Shared, T: UserEvent + 'static> WinCount<Shared, T> {
+    fn push_new(mut self, window: Window<Shared, T>) -> Self {
+        match self {
+            Self::None => {
+                self = Self::One(window)
+            }
+            Self::One(win) => {
+                let mut container = HashMap::new();
+                container.insert(win.window.id(), win);
+                container.insert(window.window.id(), window);
+                self = Self::Multi(container);
+            }
+            Self::Multi(ref mut container) => {
+                container.insert(window.window.id(), window);
+            }
+        }
+        self
+    }
+}
+
 struct Window<Shared, T: UserEvent + 'static> {
     window: winit::window::Window,
     surface: skia_safe::Surface,
@@ -112,6 +138,10 @@ impl<'a> skip::Renderer for Canvas<'a> {
         );
     }
 
+    fn render_circle(&mut self, circle: &skip::CircleW) {
+        self.paint.set_argb(circle.color.a, circle.color.r, circle.color.g, circle.color.b);
+        self.canvas.draw_circle((circle.pos.x, circle.pos.y), circle.radius, self.paint);
+    }
     //    #[inline]
     fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
         let fonts = &self.fonts[text.font_id];
