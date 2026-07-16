@@ -11,7 +11,6 @@ use glutin::{
     surface::GlSurface,
 };
 use raw_window_handle::HasWindowHandle;
-
 pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'static>(app: App) {
     let event_loop: winit::event_loop::EventLoop<Event> =
         winit::event_loop::EventLoop::with_user_event()
@@ -19,12 +18,12 @@ pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'st
             .unwrap();
     let mut wn = WinitRenderer {
         on: Vec::new(),
-//        key: Vec::new(),
+        //        key: Vec::new(),
         mouse_pos: (0.0, 0.0).into(),
         current_focus: winit::window::WindowId::dummy(),
         app,
         windows: HashMap::new(),
-        proxy: event_loop.create_proxy(),
+        proxy: Event(event_loop.create_proxy()),
         paint: skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.0), None),
         fonts: Vec::new(),
         images: Vec::new(),
@@ -36,17 +35,25 @@ pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'st
 
 pub trait UserEvent {}
 
+pub struct Event<T: UserEvent + 'static>(winit::event_loop::EventLoopProxy<T>);
+
+impl<T: UserEvent + 'static> Event<T> {
+    pub fn send_event(&self, event: T) {
+        self.0.send_event(event);
+    }
+}
+
 pub struct DrawFn<Shared, T: UserEvent + 'static>(
-    pub fn(
+    pub  fn(
         &mut Shared,
         skip::Horizontal<Canvas>,
-        &winit::event_loop::EventLoopProxy<T>,
+        &Event<T>,
     ) -> Option<Duration>,
 );
 
 pub struct KeyFn<Shared, T: UserEvent + 'static>(
-    pub fn(&mut Shared, skip::Key, &winit::event_loop::EventLoopProxy<T>)
-    );
+    pub fn(&mut Shared, (skip::Key, skip::State), &Event<T>),
+);
 
 pub trait AppController<T: UserEvent, Shared> {
     fn bootstrap<'skip>(&mut self, context: Context<'skip, Shared, T>);
@@ -57,32 +64,6 @@ pub trait AppController<T: UserEvent, Shared> {
 pub enum Redraw {
     FocusOnly,
     Always,
-}
-
-enum WinCount<Shared, T: UserEvent + 'static> {
-    One(Window<Shared, T>),
-    Multi(HashMap<winit::window::WindowId, Window<Shared, T>>),
-    None
-}
-
-impl<Shared, T: UserEvent + 'static> WinCount<Shared, T> {
-    fn push_new(mut self, window: Window<Shared, T>) -> Self {
-        match self {
-            Self::None => {
-                self = Self::One(window)
-            }
-            Self::One(win) => {
-                let mut container = HashMap::new();
-                container.insert(win.window.id(), win);
-                container.insert(window.window.id(), window);
-                self = Self::Multi(container);
-            }
-            Self::Multi(ref mut container) => {
-                container.insert(window.window.id(), window);
-            }
-        }
-        self
-    }
 }
 
 struct Window<Shared, T: UserEvent + 'static> {
@@ -105,7 +86,7 @@ pub struct Canvas<'skip> {
     //key: &'skip Vec<skip::Key>,
     canvas: &'skip skia_safe::Canvas,
     paint: &'skip mut skia_safe::Paint,
-    fonts: &'skip Vec<skia_safe::Font>,
+    fonts: &'skip mut Vec<skia_safe::Font>,
     images: &'skip Vec<skia_safe::Image>,
     window_dim: skip::Vec2<f32>,
 }
@@ -139,10 +120,16 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
 
     fn render_circle(&mut self, circle: &skip::CircleW) {
-        self.paint.set_argb(circle.color.a, circle.color.r, circle.color.g, circle.color.b);
-        self.canvas.draw_circle((circle.pos.x, circle.pos.y), circle.radius, self.paint);
+        self.paint.set_argb(
+            circle.color.a,
+            circle.color.r,
+            circle.color.g,
+            circle.color.b,
+        );
+        self.canvas
+            .draw_circle((circle.pos.x, circle.pos.y), circle.radius, self.paint);
     }
-    //    #[inline]
+    #[inline]
     fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
         let fonts = &self.fonts[text.font_id];
         let (_, rect) = fonts.measure_str(text.text, None);
@@ -153,12 +140,21 @@ impl<'a> skip::Renderer for Canvas<'a> {
         if text.pos.x >= self.window_dim.x || text.pos.y >= self.window_dim.y {
             return;
         }
+
+        let size = self.text_size(text);        
+        let right = text.pos.x + size.x;
+        let bottom = text.pos.y + size.y;
+
+        if right <= 0.0 || bottom <= 0.0 {
+            return;
+        } 
         self.paint
             .set_argb(text.color.a, text.color.r, text.color.g, text.color.b);
+        let font = self.fonts[text.font_id].set_size(text.size);
         self.canvas.draw_str(
             text.text,
             (text.pos.x, text.pos.y),
-            &self.fonts[text.font_id],
+            font,
             self.paint,
         );
     }
@@ -214,7 +210,7 @@ struct WinitRenderer<T: UserEvent + 'static, A: AppController<T, Shared>, Shared
     //key: Vec<skip::Key>,
     mouse_pos: skip::Vec2<f32>,
     current_focus: winit::window::WindowId,
-    proxy: winit::event_loop::EventLoopProxy<T>,
+    proxy: Event<T>, 
     app: A,
     paint: skia_safe::Paint,
     fonts: Vec<skia_safe::Font>,
@@ -235,7 +231,7 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
         &mut self,
         attr: winit::window::WindowAttributes,
         draw_fn: DrawFn<Shared, T>,
-        key_fn: Option<KeyFn<Shared, T>>
+        key_fn: Option<KeyFn<Shared, T>>,
     ) -> winit::window::WindowId {
         let display_builder = glutin_winit::DisplayBuilder::new()
             .with_window_attributes(Some(attr.with_visible(false)))
@@ -333,24 +329,25 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
         }
     }
 
-    pub fn change_key_fn(&mut self, id: &winit::window::WindowId, key_fn: Option<KeyFn<Shared, T>>) {
+    pub fn change_key_fn(
+        &mut self,
+        id: &winit::window::WindowId,
+        key_fn: Option<KeyFn<Shared, T>>,
+    ) {
         if let Some(window) = self.windows.get_mut(id) {
             window.key_fn = key_fn
         }
     }
 
-
-
     pub fn new_font(
         &mut self,
         data: &[u8],
-        size: f32,
         font_id: Option<skip::Font>,
     ) -> Result<skip::Font, ()> {
         let tf = self.font_mgr.new_from_data(data, None);
         match tf {
             Some(tf) => {
-                let font = skia_safe::Font::from_typeface(&tf, Some(size));
+                let font = skia_safe::Font::from_typeface(&tf, None);
                 match font_id {
                     Some(id) => {
                         self.fonts.insert(id, font);
@@ -480,20 +477,23 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
             None => (),
             Some(window) => match event {
                 winit::event::WindowEvent::KeyboardInput { event, .. } => {
-                    let key = match event.physical_key {
-                        winit::keyboard::PhysicalKey::Code(c) => {
-                            let key = keycode_to_str(c);
-                            let skip_key = match event.state {
-                                winit::event::ElementState::Pressed => skip::Key::Press(key),
-                                winit::event::ElementState::Released => skip::Key::Release(key),
-                            };
-                            skip_key
-                        }
-                        winit::keyboard::PhysicalKey::Unidentified(_) => {
-                            skip::Key::Press("Unknown")
-                        }
-                    };
+                    if window_id != self.current_focus {
+                        return;
+                    }
                     if let Some(key_fn) = &window.key_fn {
+                        let state = match event.state {
+                            winit::event::ElementState::Pressed => skip::State::Pressed,
+                            winit::event::ElementState::Released => skip::State::Released,
+                        };
+                        let key = match event.physical_key {
+                            winit::keyboard::PhysicalKey::Code(c) => {
+                                let key = keycode_translate(c);
+                                (key, state)
+                            }
+                            winit::keyboard::PhysicalKey::Unidentified(_) => {
+                                (skip::Key::Unknown, state)
+                            }
+                        };
                         (key_fn.0)(self.app.share_resource(), key, &self.proxy);
                     }
                 }
@@ -526,16 +526,15 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                     }
                     let canvas = window.surface.canvas();
                     let window_dim = window.window.inner_size();
-                    canvas.clear(skia_safe::Color::WHITE); 
+                    canvas.clear(skia_safe::Color::WHITE);
                     let duration = (window.draw_fn.0)(
                         self.app.share_resource(),
                         skip::Horizontal::new(Canvas {
                             on: &self.on,
-                            mouse_pos: &self.mouse_pos,
-                            //key: &self.key,
+                            mouse_pos: &self.mouse_pos, 
                             canvas,
                             paint: &mut self.paint,
-                            fonts: &self.fonts,
+                            fonts: &mut self.fonts,
                             images: &self.images,
                             window_dim: (window_dim.width as f32, window_dim.height as f32).into(),
                         }),
@@ -548,7 +547,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                         .swap_buffers(&window.skia_context)
                         .unwrap();
                     self.on.clear();
-//                    self.key.clear();
+                    //                    self.key.clear();
                     if let Some(d) = duration {
                         window.next_redraw = Some(Instant::now() + d);
                     }
@@ -560,6 +559,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                         8,
                         window.fb_info,
                     );
+                    window.window.set_cursor(cursor);
                     window.surface = skia_safe::gpu::surfaces::wrap_backend_render_target(
                         &mut window.dr_context,
                         &backend_render_target,
@@ -569,7 +569,6 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                         None,
                     )
                     .unwrap();
-        
                 }
                 winit::event::WindowEvent::CloseRequested => {
                     self.windows.remove(&window_id);
@@ -588,76 +587,73 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
     }
 }
 
-fn keycode_to_str(key: winit::keyboard::KeyCode) -> &'static str {
+fn keycode_translate(key: winit::keyboard::KeyCode) -> skip::Key {
+    use skip::Key;
     use winit::keyboard::*;
     match key {
         // Letters
-        KeyCode::KeyA => "a",
-        KeyCode::KeyB => "b",
-        KeyCode::KeyC => "c",
-        KeyCode::KeyD => "d",
-        KeyCode::KeyE => "e",
-        KeyCode::KeyF => "f",
-        KeyCode::KeyG => "g",
-        KeyCode::KeyH => "h",
-        KeyCode::KeyI => "i",
-        KeyCode::KeyJ => "j",
-        KeyCode::KeyK => "k",
-        KeyCode::KeyL => "l",
-        KeyCode::KeyM => "m",
-        KeyCode::KeyN => "n",
-        KeyCode::KeyO => "o",
-        KeyCode::KeyP => "p",
-        KeyCode::KeyQ => "q",
-        KeyCode::KeyR => "r",
-        KeyCode::KeyS => "s",
-        KeyCode::KeyT => "t",
-        KeyCode::KeyU => "u",
-        KeyCode::KeyV => "v",
-        KeyCode::KeyW => "w",
-        KeyCode::KeyX => "x",
-        KeyCode::KeyY => "y",
-        KeyCode::KeyZ => "z",
-
+        KeyCode::KeyA => Key::Char("a"),
+        KeyCode::KeyB => Key::Char("b"),
+        KeyCode::KeyC => Key::Char("c"),
+        KeyCode::KeyD => Key::Char("d"),
+        KeyCode::KeyE => Key::Char("e"),
+        KeyCode::KeyF => Key::Char("f"),
+        KeyCode::KeyG => Key::Char("g"),
+        KeyCode::KeyH => Key::Char("h"),
+        KeyCode::KeyI => Key::Char("i"),
+        KeyCode::KeyJ => Key::Char("j"),
+        KeyCode::KeyK => Key::Char("k"),
+        KeyCode::KeyL => Key::Char("l"),
+        KeyCode::KeyM => Key::Char("m"),
+        KeyCode::KeyN => Key::Char("n"),
+        KeyCode::KeyO => Key::Char("o"),
+        KeyCode::KeyP => Key::Char("p"),
+        KeyCode::KeyQ => Key::Char("q"),
+        KeyCode::KeyR => Key::Char("r"),
+        KeyCode::KeyS => Key::Char("s"),
+        KeyCode::KeyT => Key::Char("t"),
+        KeyCode::KeyU => Key::Char("u"),
+        KeyCode::KeyV => Key::Char("v"),
+        KeyCode::KeyW => Key::Char("w"),
+        KeyCode::KeyX => Key::Char("x"),
+        KeyCode::KeyY => Key::Char("y"),
+        KeyCode::KeyZ => Key::Char("z"),
         // Digits
-        KeyCode::Digit0 => "0",
-        KeyCode::Digit1 => "1",
-        KeyCode::Digit2 => "2",
-        KeyCode::Digit3 => "3",
-        KeyCode::Digit4 => "4",
-        KeyCode::Digit5 => "5",
-        KeyCode::Digit6 => "6",
-        KeyCode::Digit7 => "7",
-        KeyCode::Digit8 => "8",
-        KeyCode::Digit9 => "9",
-
+        KeyCode::Digit0 => Key::Num("0"),
+        KeyCode::Digit1 => Key::Num("1"),
+        KeyCode::Digit2 => Key::Num("2"),
+        KeyCode::Digit3 => Key::Num("3"),
+        KeyCode::Digit4 => Key::Num("4"),
+        KeyCode::Digit5 => Key::Num("5"),
+        KeyCode::Digit6 => Key::Num("6"),
+        KeyCode::Digit7 => Key::Num("7"),
+        KeyCode::Digit8 => Key::Num("8"),
+        KeyCode::Digit9 => Key::Num("9"),
         // Symbols
-        KeyCode::Backquote => "`",
-        KeyCode::Backslash => "\\",
-        KeyCode::BracketLeft => "[",
-        KeyCode::BracketRight => "]",
-        KeyCode::Comma => ",",
-        KeyCode::Equal => "=",
-        KeyCode::Minus => "-",
-        KeyCode::Period => ".",
-        KeyCode::Quote => "'",
-        KeyCode::Semicolon => ";",
-        KeyCode::Slash => "/",
-        KeyCode::Space => " ",
-
+        KeyCode::Backslash => Key::Symbol("\\"),
+        KeyCode::BracketLeft => Key::Symbol("["),
+        KeyCode::BracketRight => Key::Symbol("]"),
+        KeyCode::Comma => Key::Symbol(","),
+        KeyCode::Equal => Key::Symbol("="),
+        KeyCode::Minus => Key::Symbol("-"),
+        KeyCode::Period => Key::Symbol("."),
+        KeyCode::Quote => Key::Symbol("'"),
+        KeyCode::Semicolon => Key::Symbol(";"),
+        KeyCode::Slash => Key::Symbol("/"),
+        KeyCode::Space => Key::Symbol(" "),
+        KeyCode::Backquote => Key::Symbol("`"),
         // Everything else keeps its variant name
-        KeyCode::AltLeft => "AltLeft",
-        KeyCode::AltRight => "AltRight",
-        KeyCode::Backspace => "Backspace",
-        KeyCode::CapsLock => "CapsLock",
-        KeyCode::Enter => "Enter",
-        KeyCode::Escape => "Escape",
-        KeyCode::Tab => "Tab",
-        KeyCode::ArrowUp => "ArrowUp",
-        KeyCode::ArrowDown => "ArrowDown",
-        KeyCode::ArrowLeft => "ArrowLeft",
-        KeyCode::ArrowRight => "ArrowRight",
-        // ...continue for the remaining variants...
-        _ => "Unknown",
+        KeyCode::AltLeft => Key::Named("AltLeft"),
+        KeyCode::AltRight => Key::Named("AltRight"),
+        KeyCode::Backspace => Key::Named("Backspace"),
+        KeyCode::CapsLock => Key::Named("CapsLock"),
+        KeyCode::Enter => Key::Named("Enter"),
+        KeyCode::Escape => Key::Named("Escape"),
+        KeyCode::Tab => Key::Named("Tab"),
+        KeyCode::ArrowUp => Key::Named("ArrowUp"),
+        KeyCode::ArrowDown => Key::Named("ArrowDown"),
+        KeyCode::ArrowLeft => Key::Named("ArrowLeft"),
+        KeyCode::ArrowRight => Key::Named("ArrowRight"),
+        _ => Key::Unknown,
     }
 }

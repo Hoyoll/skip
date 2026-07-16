@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use skip::{Circle, Div, Font, Horizontal, Mouse, On, Proc, State, Text};
-use skip_skia::{AppController, Canvas, DrawFn, UserEvent};
-use winit::{event_loop::EventLoopProxy, window::WindowAttributes};
+use skip_skia::{AppController, Canvas, DrawFn, Event, UserEvent};
 
 enum Color {
     Background,
@@ -35,9 +34,7 @@ impl From<&Color> for skip::Color {
     }
 }
 
-enum Message {
-    
-}
+enum Message {}
 
 impl UserEvent for Message {}
 
@@ -51,6 +48,16 @@ enum Button {
     Number(&'static str),
     Operand(&'static str),
     Action(&'static str)
+}
+
+impl Button {
+    pub fn get_text(&self) -> &'static str {
+        match self {
+           Button::Action(text) => text,
+           Button::Number(num) => num,
+           Button::Operand(op) => op
+        }
+    }
 }
 
 const BUTTONS: [Button; 16] = [
@@ -92,8 +99,9 @@ impl<'skip> Proc<'skip, Div<Canvas<'skip>>, Canvas<'skip>, Font> for &mut TextIn
         .render()
         .child(|text: Text<_>| {
             text
-            .padding((0.0, 40.0))
+            .padding((0.0, 80.0))
             .font_id(argv)
+            .size(80.0f32)
             .color(Color::Light)
             .text(&self.text)
             .render()
@@ -102,7 +110,7 @@ impl<'skip> Proc<'skip, Div<Canvas<'skip>>, Canvas<'skip>, Font> for &mut TextIn
 }
 
 impl Calc {
-    fn main_window(context: &mut Context, mut ui: Horizontal<Canvas>, proxy: &EventLoopProxy<Message>) -> Option<Duration> {
+    fn main_window(context: &mut Context, mut ui: Horizontal<Canvas>, proxy: &Event<Message>) -> Option<Duration> {
         let win = ui.canvas_size();
         let gap = 5.0;
         let height = win.y / 5.0 - gap;
@@ -154,23 +162,13 @@ impl Calc {
                         .child(|label: Text<_>| {
                             let pad_x = (width / 2.0) - (width / 15.0);
                             let pad_y = height / 2.0 + (height / 10.0); 
-                            let pad = (pad_x,pad_y);
-                            let text = match btn {
-                                Button::Number(n) => {
-                                    n
-                                },
-                                Button::Operand(op) => {        
-                                    op
-                                },
-                                Button::Action(ac) => {
-                                    ac
-                                }
-                            };
+                            let pad = (pad_x,pad_y); 
                             label
                             .padding(pad)
                             .color(&text_color)
+                            .size(40.0f32)
                             .font_id(context.fira_code)
-                            .text(*text)
+                            .text(btn.get_text())
                             .render()
                         })
                     })
@@ -189,7 +187,7 @@ struct Context {
 
 impl AppController<Message, Context> for Calc {
    fn bootstrap(&mut self, mut context: skip_skia::Context<Context, Message>) {
-       let id = context.new_window(WindowAttributes::default(), DrawFn(Calc::main_window), None);
+       let id = context.new_window(winit::window::WindowAttributes::default(), DrawFn(Calc::main_window), None);
        context.request_redraw(&id);
        context.set_visible(&id, true);
 

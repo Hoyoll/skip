@@ -41,6 +41,7 @@ pub struct Text<'skip, R: Renderer> {
 pub struct TextW<'skip> {
     pub text: &'skip str,
     pub font_id: Font,
+    pub size: f32,
     pub color: Color,
     pub pos: Vec2<f32>,
 }
@@ -685,6 +686,13 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self
     }
 
+    #[inline]
+    pub fn size<S: Into<f32>>(mut self, size: S) -> Self {
+        self.widget.size = size.into();
+        self
+    }
+
+    #[inline]
     pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
         let pos = pos.into();
         self.widget.pos.x += pos.x;
@@ -884,6 +892,7 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Text<'skip, R> {
         widget.pos = pos.into();
         Self { widget, renderer }
     }
+    
     #[inline]
     fn size(&mut self) -> Vec2<f32> {
         self.renderer.text_size(&self.widget)
@@ -905,9 +914,13 @@ pub enum Mouse {
 }
 
 pub enum Key {
-    Press(&'static str),
-    Release(&'static str),
+    Num(&'static str),
+    Char(&'static str),
+    Named(&'static str),
+    Symbol(&'static str),
+    Unknown
 }
+
 #[derive(Debug)]
 pub struct Vec2<T> {
     pub x: T,
@@ -961,6 +974,20 @@ struct IterArg<Iter: Iterator> {
     pub column: Option<usize>
 }
 
+impl<'skip> From<()> for TextW<'skip> {
+    #[inline]
+    fn from(_value: ()) -> Self {
+        Self {
+            text: "",
+            font_id: 0,
+            size: 0.0,
+            color: ().into(),
+            pos: ().into(),
+        }
+    }
+}
+
+
 impl<Iter: Iterator> From<(Iter, usize)> for IterArg<Iter> {
     #[inline]
     fn from(value: (Iter, usize)) -> Self {
@@ -996,68 +1023,6 @@ impl<C: Into<Color>> From<(ImageId, C)> for ImageW {
             pos: ().into(),
             size: ().into(),
             tint: value.1.into(),
-        }
-    }
-}
-
-impl<'skip> From<()> for TextW<'skip> {
-    #[inline]
-    fn from(_value: ()) -> Self {
-        Self {
-            text: "",
-            font_id: 0,
-            color: ().into(),
-            pos: ().into(),
-        }
-    }
-}
-
-impl<'skip> From<(&'skip str)> for TextW<'skip> {
-    #[inline]
-    fn from(value: (&'skip str)) -> Self {
-        Self {
-            text: value.into(),
-            font_id: 0,
-            color: ().into(),
-            pos: ().into(),
-        }
-    }
-}
-
-impl<'skip, Pos: Into<Vec2<f32>>> From<(&'skip str, Pos)> for TextW<'skip> {
-    #[inline]
-    fn from(value: (&'skip str, Pos)) -> Self {
-        Self {
-            text: value.0.into(),
-            font_id: 0,
-            color: ().into(),
-            pos: value.1.into(),
-        }
-    }
-}
-
-impl<'skip> From<(&'skip str, Font)> for TextW<'skip> {
-    #[inline]
-    fn from(value: (&'skip str, Font)) -> Self {
-        Self {
-            text: value.0,
-            font_id: value.1,
-            color: ().into(),
-            pos: ().into(),
-        }
-    }
-}
-
-impl<'skip, Col: Into<Color>, Pos: Into<Vec2<f32>>> From<(&'skip str, Font, Col, Pos)>
-    for TextW<'skip>
-{
-    #[inline]
-    fn from(value: (&'skip str, Font, Col, Pos)) -> Self {
-        Self {
-            text: value.0,
-            font_id: value.1,
-            color: value.2.into(),
-            pos: value.3.into(),
         }
     }
 }

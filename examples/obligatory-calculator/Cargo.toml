@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-winit.workspace = true
 skip.workspace = true
 skip-skia.workspace = true
+winit.workspace = true
 meval = "0.2.0"
