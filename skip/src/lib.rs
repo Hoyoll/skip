@@ -1,5 +1,7 @@
+mod builtin;
 use std::marker::PhantomData;
 
+use crate::builtin::{ProcArg, Widget};
 #[derive(Debug)]
 pub struct Color {
     pub r: u8,
@@ -80,6 +82,12 @@ pub struct Vertical<R: Renderer> {
 
 impl<'skip, R: Renderer> Horizontal<R> {
     #[inline]
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
+        self.renderer.change_cursor(cursor);
+        self
+    }
+
+    #[inline]
     pub fn new(renderer: R) -> Self {
         Self {
             layout: Layout {
@@ -124,12 +132,8 @@ impl<'skip, R: Renderer> Horizontal<R> {
     }
 
     #[inline]
-    pub fn proc<
-        PA: Into<ProcArg<'skip, P, Self, R, Arg>>,
-        P: Proc<'skip, Self, R, Arg>,
-        Arg,
-    >(
-        mut self,
+    pub fn proc<PA: Into<ProcArg<'skip,R, P>>,P: Proc<'skip, R, Widget = Self>>(
+        self,
         proc: PA,
     ) -> Self {
         let mut pa = proc.into();
@@ -222,14 +226,16 @@ impl<'skip, R: Renderer> Horizontal<R> {
         }
         self
     }
-
-    pub fn mouse(self) {
-        
-    }
 }
 
 
 impl<'skip, R: Renderer> Vertical<R> {
+    #[inline]
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
+        self.renderer.change_cursor(cursor);
+        self
+    }
+
     #[inline]
     pub fn new(renderer: R) -> Self {
         Self {
@@ -275,17 +281,14 @@ impl<'skip, R: Renderer> Vertical<R> {
     }
  
     #[inline]
-    pub fn proc<
-        PA: Into<ProcArg<'skip, P, Self, R, Arg>>,
-        P: Proc<'skip, Self, R, Arg>,
-        Arg,
-    >(
-        mut self,
+    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+        self,
         proc: PA,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
     }
+    
     #[inline]
     pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> W, W: Widget<'skip, R>>(
         mut self,
@@ -373,6 +376,12 @@ impl<'skip, R: Renderer> Vertical<R> {
 
 impl<'skip, R: Renderer> Circle<R> {
     #[inline]
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
+        self.renderer.change_cursor(cursor);
+        self
+    }
+
+    #[inline]
     pub fn radius<V: Into<f32>>(mut self, rad: V) -> Self {
         self.widget.radius = rad.into();
         self
@@ -395,15 +404,9 @@ impl<'skip, R: Renderer> Circle<R> {
         self.renderer.render_circle(&self.widget);
         self
     }
-
-
     #[inline]
-    pub fn proc<
-        PA: Into<ProcArg<'skip, P, Self, R, Arg>>,
-        P: Proc<'skip, Self, R, Arg>,
-        Arg,
-    >(
-        mut self,
+    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+        self,
         proc: PA,
     ) -> Self {
         let mut pa = proc.into();
@@ -412,6 +415,12 @@ impl<'skip, R: Renderer> Circle<R> {
 }
 
 impl<'skip, R: Renderer> Image<R> {
+    #[inline]
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
+        self.renderer.change_cursor(cursor);
+        self
+    }
+
     #[inline]
     pub fn child<W: Widget<'skip, R>, F: FnMut(W) -> WO, WO: Widget<'skip, R>>(
         mut self,
@@ -449,19 +458,14 @@ impl<'skip, R: Renderer> Image<R> {
         self.widget.tint = color.into();
         self
     }
-
     #[inline]
-    pub fn proc<
-        PA: Into<ProcArg<'skip, P, Self, R, Arg>>,
-        P: Proc<'skip, Self, R, Arg>,
-        Arg,
-    >(
-        mut self,
+    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+        self,
         proc: PA,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
-    }
+    } 
     #[inline]
     pub fn horizontal<F: FnMut(Horizontal<R>) -> W, W: Widget<'skip, R>>(
         mut self,
@@ -534,7 +538,13 @@ impl<'skip, R: Renderer> Image<R> {
 
 impl<'skip, R: Renderer> Div<R> {
     #[inline]
-    pub fn child<W: Widget<'skip, R>, F: FnMut(W) -> WO, WO: Widget<'skip, R>>(
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
+        self.renderer.change_cursor(cursor);
+        self
+    }
+
+    #[inline]
+    pub fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
         mut self,
         mut f: F,
     ) -> Self {
@@ -564,6 +574,14 @@ impl<'skip, R: Renderer> Div<R> {
     #[inline]
     pub fn size<V: Into<Vec2<f32>>>(mut self, dim: V) -> Self {
         self.widget.size = dim.into();
+        self
+    }
+
+    #[inline]
+    pub fn enlarge<V: Into<Vec2<f32>>>(mut self, dim: V) -> Self {
+        let size = dim.into();
+        self.widget.size.x += size.x;
+        self.widget.size.y += size.y;
         self
     }
 
@@ -614,21 +632,15 @@ impl<'skip, R: Renderer> Div<R> {
         self
     }
 
-    
     #[inline]
-    pub fn proc<
-        PA: Into<ProcArg<'skip, P, Self, R, Arg>>,
-        P: Proc<'skip, Self, R, Arg>,
-        Arg,
-    >(
-        mut self,
+    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+        self,
         proc: PA,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
     }
 
-    #[inline]
     pub fn horizontal<F: FnMut(Horizontal<R>) -> W, W: Widget<'skip, R>>(
         mut self,
         mut f: F,
@@ -681,6 +693,12 @@ impl<'skip, R: Renderer> Div<R> {
 
 impl<'skip, R: Renderer> Text<'skip, R> {
     #[inline]
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
+        self.renderer.change_cursor(cursor);
+        self
+    }
+
+    #[inline]
     pub fn pos<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
         self.widget.pos = pos.into();
         self
@@ -688,7 +706,9 @@ impl<'skip, R: Renderer> Text<'skip, R> {
 
     #[inline]
     pub fn size<S: Into<f32>>(mut self, size: S) -> Self {
-        self.widget.size = size.into();
+        let s = size.into();
+        self.widget.size = s;
+        self.widget.pos.y += s;
         self
     }
 
@@ -722,19 +742,15 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self.renderer.render_text(&self.widget);
         self
     }
-
     #[inline]
-    pub fn proc<
-        PA: Into<ProcArg<'skip, P, Self, R, Arg>>,
-        P: Proc<'skip, Self, R, Arg>,
-        Arg,
-    >(
-        mut self,
+    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+        self,
         proc: PA,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
     }
+
 }
 
 pub trait Renderer {
@@ -748,28 +764,18 @@ pub trait Renderer {
     fn mouse_state(&mut self) -> &Vec<On>;
     fn end_clip(&mut self);
     fn canvas_size(&mut self) -> Vec2<f32>;
+    fn change_cursor(&mut self, cursor: Cursor);
 }
 
-pub trait Proc<'skip, W: Widget<'skip, R>, R: Renderer, Arg> {
-    fn consume(&mut self, widget: W, argv: Arg) -> W;
+pub trait Proc<'skip, R: Renderer> {
+    type Widget: Widget<'skip, R>;
+    type Arg;
+    fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget;
 }
 
-pub(crate) struct ProcArg<
-    'skip,
-    P: Proc<'skip, W, R, Arg>,
-    W: Widget<'skip, R>, 
-    R: Renderer,
-    Arg,
-> {
-    proc: P,
-    arg: Arg,
-    ph: PhantomData<(&'skip (), W, Arg, R)>,
-}
-
-pub(crate) trait Widget<'skip, R: Renderer> {
-    fn inherit<P: Into<Vec2<f32>>, PO: Into<Vec2<f32>>>(dim: P, pos: PO, renderer: R) -> Self;
-    fn renderer(self) -> R;
-    fn size(&mut self) -> Vec2<f32>;
+pub enum Cursor {
+    Default,
+    Pointer,
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R> for Circle<R> {
@@ -934,38 +940,17 @@ impl<T> Vec2<T> {
     }
 }
 
-impl<
-    'skip,
-    P: Proc<'skip, Out, R, Arg>,
-    Out: Widget<'skip, R>,
-    R: Renderer,
-    Arg,
-> From<(P, Arg)> for ProcArg<'skip, P, Out, R, Arg>
+impl< 'skip, R: Renderer, P: Proc<'skip, R>> From<(P, P::Arg)> for ProcArg<'skip, R, P>
 {
-    #[inline]
-    fn from(value: (P, Arg)) -> Self {
-        Self {
-            proc: value.0,
-            arg: value.1,
-            ph: PhantomData::default(),
-        }
+    fn from(value: (P, P::Arg)) -> Self {
+        Self { proc: value.0, arg: value.1, ph: PhantomData::default() }
     }
 }
 
-impl<
-    'skip,
-    P: Proc<'skip, Out, R, ()>,
-    Out: Widget<'skip, R>,
-    R: Renderer,
-> From<(P)> for ProcArg<'skip, P, Out, R, ()>
+impl<'skip, R: Renderer, P: Proc<'skip, R, Arg = ()>> From<(P)> for ProcArg<'skip, R, P> 
 {
-    #[inline]
     fn from(value: (P)) -> Self {
-        Self {
-            proc: value,
-            arg: (),
-            ph: PhantomData::default(),
-        }
+        Self { proc: value, arg: (), ph: PhantomData::default() }
     }
 }
 
@@ -1116,5 +1101,18 @@ impl From<()> for Color {
             b: 0,
             a: 0,
         }
+    }
+}
+
+impl From<&Color> for Color {
+    fn from(value: &Color) -> Self {
+        Self { r: value.r, g: value.g, b: value.b, a: value.a }
+    }
+}
+
+
+impl From<&mut Color> for Color {
+    fn from(value: &mut Color) -> Self {
+        Self { r: value.r, g: value.g, b: value.b, a: value.a }
     }
 }

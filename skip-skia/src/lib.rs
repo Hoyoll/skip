@@ -88,6 +88,7 @@ pub struct Canvas<'skip> {
     paint: &'skip mut skia_safe::Paint,
     fonts: &'skip mut Vec<skia_safe::Font>,
     images: &'skip Vec<skia_safe::Image>,
+    window: &'skip mut winit::window::Window,
     window_dim: skip::Vec2<f32>,
 }
 
@@ -201,6 +202,16 @@ impl<'a> skip::Renderer for Canvas<'a> {
 
     fn mouse_state(&mut self) -> &Vec<skip::On> {
         self.on
+    }
+
+    fn change_cursor(&mut self, cursor: skip::Cursor) {
+        use winit::window::CursorIcon::*;
+        use winit::window::Cursor::*;
+        let cursor = match cursor {
+            skip::Cursor::Default => Icon(Default),
+            skip::Cursor::Pointer => Icon(Pointer),
+        };
+        self.window.set_cursor(cursor);
     }
 }
 
@@ -527,6 +538,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                     let canvas = window.surface.canvas();
                     let window_dim = window.window.inner_size();
                     canvas.clear(skia_safe::Color::WHITE);
+                    //window.window.set_cursor(winit::window::Cursor::Icon(winit::window::CursorIcon::Default));
                     let duration = (window.draw_fn.0)(
                         self.app.share_resource(),
                         skip::Horizontal::new(Canvas {
@@ -536,6 +548,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                             paint: &mut self.paint,
                             fonts: &mut self.fonts,
                             images: &self.images,
+                            window: &mut window.window,
                             window_dim: (window_dim.width as f32, window_dim.height as f32).into(),
                         }),
                         &self.proxy,
@@ -559,7 +572,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                         8,
                         window.fb_info,
                     );
-                    window.window.set_cursor(cursor);
+                    //window.window.set_cursor(cursor);
                     window.surface = skia_safe::gpu::surfaces::wrap_backend_render_target(
                         &mut window.dr_context,
                         &backend_render_target,

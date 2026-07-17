@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Circle, Div, Font, Horizontal, Mouse, On, Proc, State, Text};
+use skip::{Circle, Cursor, Div, Font, Horizontal, Mouse, On, Proc, State, Text};
 use skip_skia::{AppController, Canvas, DrawFn, Event, UserEvent};
 
 enum Color {
@@ -93,20 +93,23 @@ impl TextInput {
     }
 }
 
-impl<'skip> Proc<'skip, Div<Canvas<'skip>>, Canvas<'skip>, Font> for &mut TextInput {
-    fn consume(&mut self, widget: Div<Canvas<'skip>>, argv: Font) -> Div<Canvas<'skip>> {
-        widget
+impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
+   type Widget = Div<Canvas<'skip>>;
+   type Arg = Font;
+
+   fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget {
+       widget
         .render()
         .child(|text: Text<_>| {
             text
-            .padding((0.0, 80.0))
             .font_id(argv)
+
             .size(80.0f32)
             .color(Color::Light)
             .text(&self.text)
             .render()
         })
-    }
+   } 
 }
 
 impl Calc {
@@ -115,7 +118,9 @@ impl Calc {
         let gap = 5.0;
         let height = win.y / 5.0 - gap;
         let width = win.x / 4.0 - gap;
-        ui.add(|background: Div<_>| {
+        ui
+        //.cursor(Cursor::Default)
+        .add(|background: Div<_>| {
             background
             .size(&win)
             .color(Color::Background)
@@ -148,6 +153,7 @@ impl Calc {
                         button
                         .color(Color::UiBg)
                         .size((width, height))
+                        //.proc((skip_cn::Border(Color::UiBg, (10.0, 10.0), (0.0, 0.0))))
                         .render()
                         .on(|on| {
                            match on {
@@ -155,16 +161,18 @@ impl Calc {
                                 _ => ()
                            } 
                         })
+                        //.cursor(Cursor::Default)
                         .hover(|_,div| {
                             text_color = Color::Light;
+                            //div.cursor(Cursor::Pointer)
                             div
                         })  
                         .child(|label: Text<_>| {
                             let pad_x = (width / 2.0) - (width / 15.0);
-                            let pad_y = height / 2.0 + (height / 10.0); 
-                            let pad = (pad_x,pad_y); 
+                            let pad_y = height / 2.0 - height / 4.0; 
+                            //let pad = (pad_x,pad_y); 
                             label
-                            .padding(pad)
+                            .padding((pad_x, pad_y))
                             .color(&text_color)
                             .size(40.0f32)
                             .font_id(context.fira_code)
@@ -191,7 +199,7 @@ impl AppController<Message, Context> for Calc {
        context.request_redraw(&id);
        context.set_visible(&id, true);
 
-       self.context.fira_code = context.new_font(FIRA_CODE, 40.0, None).unwrap();
+       self.context.fira_code = context.new_font(FIRA_CODE, None).unwrap();
    }
 
    fn user_event(&mut self, user_event: Message, context: skip_skia::Context<Context, Message>) {
