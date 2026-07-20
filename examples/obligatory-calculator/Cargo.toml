@@ -6,6 +6,5 @@ edition = "2024"
 [dependencies]
 skip.workspace = true
 skip-skia.workspace = true
-skip-cn.workspace = true
 winit.workspace = true
 meval = "0.2.0"

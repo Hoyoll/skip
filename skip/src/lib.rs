@@ -1,4 +1,7 @@
+pub mod cn;
+
 mod builtin;
+
 use std::marker::PhantomData;
 
 use crate::builtin::{ProcArg, Widget};
@@ -176,9 +179,9 @@ impl<'skip, R: Renderer> Horizontal<R> {
 
 
     #[inline]
-    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> W, W: Widget<'skip, R>>(
+    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> WO, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
         mut self,
-        mut items: I,
+        items: I,
         mut f: F,
     ) -> Self {
         let mut w;
@@ -290,7 +293,7 @@ impl<'skip, R: Renderer> Vertical<R> {
     }
     
     #[inline]
-    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> W, W: Widget<'skip, R>>(
+    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> WO, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
         mut self,
         mut items: I,
         mut f: F,
@@ -534,6 +537,11 @@ impl<'skip, R: Renderer> Image<R> {
         self.widget.pos.y += pos.y;
         self
     }
+
+    #[inline]
+    pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(self, f: F) -> W {
+        f(W::inherit(self.widget.size, self.widget.pos, self.renderer))
+    }
 }
 
 impl<'skip, R: Renderer> Div<R> {
@@ -688,10 +696,29 @@ impl<'skip, R: Renderer> Div<R> {
         self.renderer.end_clip();
         self
     }
-
+    #[inline]
+    pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(self, f: F) -> W {
+        f(W::inherit(self.widget.size, self.widget.pos, self.renderer))
+    }
 }
 
 impl<'skip, R: Renderer> Text<'skip, R> {
+    #[inline]
+    pub fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
+        mut self,
+        f: F,
+    ) -> Self {
+        let w = f(W::inherit(
+            self.renderer.text_size(&self.widget),
+            &self.widget.pos,
+            self.renderer,
+        ));
+        self.renderer = w.renderer();
+        self
+    }
+
+
+
     #[inline]
     pub fn cursor(mut self, cursor: Cursor) -> Self {
         self.renderer.change_cursor(cursor);
@@ -751,6 +778,10 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         pa.proc.consume(self, pa.arg)
     }
 
+    #[inline]
+    pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(mut self, f: F) -> W {
+        f(W::inherit(self.renderer.text_size(&self.widget), self.widget.pos, self.renderer))
+    }
 }
 
 pub trait Renderer {

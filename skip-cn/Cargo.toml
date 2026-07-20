@@ -1,7 +1,0 @@
-[package]
-name = "skip-cn"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-skip.workspace = true

@@ -1,9 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["skip-skia", "skip", "examples/*", "skip-cn"]
+members = ["skip-skia", "skip", "examples/*"]
 
 [workspace.dependencies]
 skip = { path = "skip" }
 skip-skia = { path = "skip-skia" }
-skip-cn = { path = "skip-cn" }
 winit = "0.30.13"

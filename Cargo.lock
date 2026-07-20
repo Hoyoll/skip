@@ -1113,7 +1113,6 @@ version = "0.1.0"
 dependencies = [
  "meval",
  "skip",
- "skip-cn",
  "skip-skia",
  "winit",
 ]
@@ -1502,13 +1501,6 @@ dependencies = [
 [[package]]
 name = "skip"
 version = "0.1.0"
-
-[[package]]
-name = "skip-cn"
-version = "0.1.0"
-dependencies = [
- "skip",
-]
 
 [[package]]
 name = "skip-skia"

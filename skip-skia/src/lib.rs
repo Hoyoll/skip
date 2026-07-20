@@ -11,7 +11,7 @@ use glutin::{
     surface::GlSurface,
 };
 use raw_window_handle::HasWindowHandle;
-pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'static>(app: App) {
+pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
     let event_loop: winit::event_loop::EventLoop<Event> =
         winit::event_loop::EventLoop::with_user_event()
             .build()
@@ -32,33 +32,24 @@ pub fn run_app<Shared, App: AppController<Event, Shared>, Event: UserEvent + 'st
 
     event_loop.run_app(&mut wn);
 }
+pub struct Event<T: 'static>(winit::event_loop::EventLoopProxy<T>);
 
-pub trait UserEvent {}
-
-pub struct Event<T: UserEvent + 'static>(winit::event_loop::EventLoopProxy<T>);
-
-impl<T: UserEvent + 'static> Event<T> {
+impl<T: 'static> Event<T> {
     pub fn send_event(&self, event: T) {
         self.0.send_event(event);
     }
 }
 
-pub struct DrawFn<Shared, T: UserEvent + 'static>(
-    pub  fn(
-        &mut Shared,
-        skip::Horizontal<Canvas>,
-        &Event<T>,
-    ) -> Option<Duration>,
-);
-
-pub struct KeyFn<Shared, T: UserEvent + 'static>(
-    pub fn(&mut Shared, (skip::Key, skip::State), &Event<T>),
-);
-
-pub trait AppController<T: UserEvent, Shared> {
-    fn bootstrap<'skip>(&mut self, context: Context<'skip, Shared, T>);
-    fn user_event<'skip>(&mut self, user_event: T, context: Context<'skip, Shared, T>);
-    fn share_resource(&mut self) -> &mut Shared;
+pub trait AppController<T> {
+    fn bootstrap<'skip>(&mut self, context: Context<'skip>);
+    fn on_user_event<'skip>(&mut self, user_event: T, context: Context<'skip>);
+    //fn share_resource(&mut self) -> &mut Shared;
+    fn on_draw(
+        &mut self,
+        on_window: winit::window::WindowId,
+        layout: skip::Horizontal<Canvas>,
+    ) -> Option<Duration>;
+    fn on_key(&mut self, _on_window: winit::window::WindowId, _key: (skip::Key, skip::State)) {}
 }
 
 pub enum Redraw {
@@ -66,15 +57,15 @@ pub enum Redraw {
     Always,
 }
 
-struct Window<Shared, T: UserEvent + 'static> {
+struct Window {
     window: winit::window::Window,
     surface: skia_safe::Surface,
     dr_context: skia_safe::gpu::DirectContext,
     skia_context: glutin::context::PossiblyCurrentContext,
     fb_info: skia_safe::gpu::gl::FramebufferInfo,
     gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
-    draw_fn: DrawFn<Shared, T>,
-    key_fn: Option<KeyFn<Shared, T>>,
+    //draw_fn: DrawFn<Shared, T>,
+    //key_fn: Option<KeyFn<Shared, T>>,
     next_redraw: Option<Instant>,
     redraw_policy: Redraw,
     //focused: bool,
@@ -132,32 +123,33 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
     #[inline]
     fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
+        if text.text == "" {
+            ().into()
+        }
         let fonts = &self.fonts[text.font_id];
         let (_, rect) = fonts.measure_str(text.text, None);
         (rect.width(), rect.height()).into()
     }
 
     fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>) {
+        if text.text == "" {
+            return;
+        }
         if text.pos.x >= self.window_dim.x || text.pos.y >= self.window_dim.y {
             return;
         }
-
-        let size = self.text_size(text);        
+        let size = self.text_size(text);
         let right = text.pos.x + size.x;
         let bottom = text.pos.y + size.y;
 
         if right <= 0.0 || bottom <= 0.0 {
             return;
-        } 
+        }
         self.paint
             .set_argb(text.color.a, text.color.r, text.color.g, text.color.b);
         let font = self.fonts[text.font_id].set_size(text.size);
-        self.canvas.draw_str(
-            text.text,
-            (text.pos.x, text.pos.y),
-            font,
-            self.paint,
-        );
+        self.canvas
+            .draw_str(text.text, (text.pos.x, text.pos.y), font, self.paint);
     }
 
     fn render_img(&mut self, img: &skip::ImageW) {
@@ -205,8 +197,8 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
 
     fn change_cursor(&mut self, cursor: skip::Cursor) {
-        use winit::window::CursorIcon::*;
         use winit::window::Cursor::*;
+        use winit::window::CursorIcon::*;
         let cursor = match cursor {
             skip::Cursor::Default => Icon(Default),
             skip::Cursor::Pointer => Icon(Pointer),
@@ -215,13 +207,13 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
 }
 
-struct WinitRenderer<T: UserEvent + 'static, A: AppController<T, Shared>, Shared> {
-    windows: HashMap<winit::window::WindowId, Window<Shared, T>>,
+struct WinitRenderer<T: 'static, A: AppController<T>> {
+    windows: HashMap<winit::window::WindowId, Window>,
     on: Vec<skip::On>,
     //key: Vec<skip::Key>,
     mouse_pos: skip::Vec2<f32>,
     current_focus: winit::window::WindowId,
-    proxy: Event<T>, 
+    proxy: Event<T>,
     app: A,
     paint: skia_safe::Paint,
     fonts: Vec<skia_safe::Font>,
@@ -229,20 +221,20 @@ struct WinitRenderer<T: UserEvent + 'static, A: AppController<T, Shared>, Shared
     images: Vec<skia_safe::Image>,
 }
 
-pub struct Context<'skip, Shared, T: UserEvent + 'static> {
-    windows: &'skip mut HashMap<winit::window::WindowId, Window<Shared, T>>,
+pub struct Context<'skip> {
+    windows: &'skip mut HashMap<winit::window::WindowId, Window>,
     event_loop: &'skip winit::event_loop::ActiveEventLoop,
     fonts: &'skip mut Vec<skia_safe::Font>,
     font_mgr: &'skip mut skia_safe::FontMgr,
     images: &'skip mut Vec<skia_safe::Image>,
 }
 
-impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
+impl<'skip> Context<'skip> {
     pub fn new_window(
         &mut self,
         attr: winit::window::WindowAttributes,
-        draw_fn: DrawFn<Shared, T>,
-        key_fn: Option<KeyFn<Shared, T>>,
+        //draw_fn: DrawFn<Shared, T>,
+        //key_fn: Option<KeyFn<Shared, T>>,
     ) -> winit::window::WindowId {
         let display_builder = glutin_winit::DisplayBuilder::new()
             .with_window_attributes(Some(attr.with_visible(false)))
@@ -321,8 +313,8 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
                 fb_info,
                 gl_surface,
                 //focused: false,
-                draw_fn,
-                key_fn,
+                //draw_fn,
+                //key_fn,
                 next_redraw: None,
                 redraw_policy: Redraw::FocusOnly,
             },
@@ -334,27 +326,7 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
         self.windows.remove(id);
     }
 
-    pub fn change_draw_fn(&mut self, id: &winit::window::WindowId, draw_fn: DrawFn<Shared, T>) {
-        if let Some(window) = self.windows.get_mut(id) {
-            window.draw_fn = draw_fn
-        }
-    }
-
-    pub fn change_key_fn(
-        &mut self,
-        id: &winit::window::WindowId,
-        key_fn: Option<KeyFn<Shared, T>>,
-    ) {
-        if let Some(window) = self.windows.get_mut(id) {
-            window.key_fn = key_fn
-        }
-    }
-
-    pub fn new_font(
-        &mut self,
-        data: &[u8],
-        font_id: Option<skip::Font>,
-    ) -> Result<skip::Font, ()> {
+    pub fn new_font(&mut self, data: &[u8], font_id: Option<skip::Font>) -> Result<skip::Font, ()> {
         let tf = self.font_mgr.new_from_data(data, None);
         match tf {
             Some(tf) => {
@@ -420,8 +392,8 @@ impl<'skip, Shared, T: UserEvent + 'static> Context<'skip, Shared, T> {
     }
 }
 
-impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
-    winit::application::ApplicationHandler<T> for WinitRenderer<T, A, Shared>
+impl<T: 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
+    for WinitRenderer<T, A>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.app.bootstrap(Context {
@@ -434,7 +406,7 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
     }
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: T) {
-        self.app.user_event(
+        self.app.on_user_event(
             event,
             Context {
                 windows: &mut self.windows,
@@ -491,22 +463,23 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                     if window_id != self.current_focus {
                         return;
                     }
-                    if let Some(key_fn) = &window.key_fn {
-                        let state = match event.state {
-                            winit::event::ElementState::Pressed => skip::State::Pressed,
-                            winit::event::ElementState::Released => skip::State::Released,
-                        };
-                        let key = match event.physical_key {
-                            winit::keyboard::PhysicalKey::Code(c) => {
-                                let key = keycode_translate(c);
-                                (key, state)
-                            }
-                            winit::keyboard::PhysicalKey::Unidentified(_) => {
-                                (skip::Key::Unknown, state)
-                            }
-                        };
-                        (key_fn.0)(self.app.share_resource(), key, &self.proxy);
-                    }
+                    //if let Some(key_fn) = &window.key_fn {
+                    let state = match event.state {
+                        winit::event::ElementState::Pressed => skip::State::Pressed,
+                        winit::event::ElementState::Released => skip::State::Released,
+                    };
+                    let key = match event.physical_key {
+                        winit::keyboard::PhysicalKey::Code(c) => {
+                            let key = keycode_translate(c);
+                            (key, state)
+                        }
+                        winit::keyboard::PhysicalKey::Unidentified(_) => {
+                            (skip::Key::Unknown, state)
+                        }
+                    };
+                    self.app.on_key(window_id, key);
+                    //(key_fn.0)(self.app.share_resource(), key, &self.proxy);
+                    //}
                 }
                 winit::event::WindowEvent::MouseInput { state, button, .. } => {
                     let button = match button {
@@ -539,11 +512,11 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                     let window_dim = window.window.inner_size();
                     canvas.clear(skia_safe::Color::WHITE);
                     //window.window.set_cursor(winit::window::Cursor::Icon(winit::window::CursorIcon::Default));
-                    let duration = (window.draw_fn.0)(
-                        self.app.share_resource(),
+                    let duration = self.app.on_draw(
+                        window_id,
                         skip::Horizontal::new(Canvas {
                             on: &self.on,
-                            mouse_pos: &self.mouse_pos, 
+                            mouse_pos: &self.mouse_pos,
                             canvas,
                             paint: &mut self.paint,
                             fonts: &mut self.fonts,
@@ -551,8 +524,8 @@ impl<T: UserEvent + 'static, A: AppController<T, Shared>, Shared>
                             window: &mut window.window,
                             window_dim: (window_dim.width as f32, window_dim.height as f32).into(),
                         }),
-                        &self.proxy,
                     );
+
                     window.dr_context.flush_and_submit();
                     //window.dr_context.flush_and_submit_surface(&mut window.surface, None);
                     window
