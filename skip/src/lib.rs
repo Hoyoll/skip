@@ -20,7 +20,7 @@ pub struct Circle<R: Renderer> {
 
 pub struct CircleW {
     pub radius: f32,
-    pub color: Color,
+    //pub color: Color,
     pub pos: Vec2<f32>,
 }
 
@@ -32,10 +32,10 @@ pub struct Image<R: Renderer> {
 pub type ImageId = usize;
 
 pub struct ImageW {
-    pub image_id: ImageId,
+    //pub image_id: ImageId,
     pub pos: Vec2<f32>,
     pub size: Vec2<f32>,
-    pub tint: Color,
+    //pub tint: Color,
 }
 
 pub struct Text<'skip, R: Renderer> {
@@ -47,7 +47,7 @@ pub struct TextW<'skip> {
     pub text: &'skip str,
     pub font_id: Font,
     pub size: f32,
-    pub color: Color,
+    //pub color: Color,
     pub pos: Vec2<f32>,
 }
 
@@ -61,8 +61,8 @@ pub struct Div<R: Renderer> {
 #[derive(Debug)]
 pub struct DivW {
     pub size: Vec2<f32>,
-    pub rad: f32,
-    pub color: Color,
+    //pub rad: f32,
+    //pub color: Color,
     pub pos: Vec2<f32>,
 }
 
@@ -397,14 +397,8 @@ impl<'skip, R: Renderer> Circle<R> {
     }
 
     #[inline]
-    pub fn color<C: Into<Color>>(mut self, color: C) -> Self {
-        self.widget.color = color.into();
-        self
-    }
-
-    #[inline]
-    pub fn render(mut self) -> Self {
-        self.renderer.render_circle(&self.widget);
+    pub fn render<C: Into<Color>>(mut self, color: C) -> Self {
+        self.renderer.render_circle(&self.widget, color.into());
         self
     }
     #[inline]
@@ -425,22 +419,22 @@ impl<'skip, R: Renderer> Image<R> {
     }
 
     #[inline]
+    pub fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+        self.renderer.get_parent()
+    }
+
+    #[inline]
     pub fn child<W: Widget<'skip, R>, F: FnMut(W) -> WO, WO: Widget<'skip, R>>(
         mut self,
         mut f: F,
     ) -> Self {
+        self.renderer.set_parent(&self.widget.size, &self.widget.pos);
         let w = f(W::inherit(
             &self.widget.size,
             &self.widget.pos,
             self.renderer,
         ));
         self.renderer = w.renderer();
-        self
-    }
-
-    #[inline]
-    pub fn image_id(mut self, img: ImageId) -> Self {
-        self.widget.image_id = img;
         self
     }
 
@@ -457,51 +451,15 @@ impl<'skip, R: Renderer> Image<R> {
     }
 
     #[inline]
-    pub fn tint<C: Into<Color>>(mut self, color: C) -> Self {
-        self.widget.tint = color.into();
-        self
-    }
-    #[inline]
     pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
         self,
         proc: PA,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
-    } 
-    #[inline]
-    pub fn horizontal<F: FnMut(Horizontal<R>) -> W, W: Widget<'skip, R>>(
-        mut self,
-        mut f: F,
-    ) -> Self {
-        let w = f(Horizontal {
-            layout: Layout {
-                pos: (&self.widget.pos).into(),
-                offset: ().into(),
-                size: (&self.widget.size).into(),
-                gap: 0.0,
-            },
-            renderer: self.renderer,
-        });
-        self.renderer = w.renderer();
-        self
     }
 
     #[inline]
-    pub fn vertical<F: FnMut(Vertical<R>) -> W, W: Widget<'skip, R>>(mut self, mut f: F) -> Self {
-        let w = f(Vertical {
-            layout: Layout {
-                pos: (&self.widget.pos).into(),
-                offset: ().into(),
-                size: (&self.widget.size).into(),
-                gap: 0.0,
-            },
-            renderer: self.renderer,
-        });
-        self.renderer = w.renderer();
-        self
-    }
-
     pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.widget.pos.x)
@@ -542,6 +500,16 @@ impl<'skip, R: Renderer> Image<R> {
     pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(self, f: F) -> W {
         f(W::inherit(self.widget.size, self.widget.pos, self.renderer))
     }
+
+    #[inline]
+    pub fn get_size(&mut self) -> Vec2<f32> {
+        self.size()
+    }
+
+    pub fn render<Color: Into<crate::Color>>(mut self, color: Color, image_id: ImageId) -> Self {
+        self.renderer.render_img(&self.widget, color.into(), image_id);
+        self
+    }
 }
 
 impl<'skip, R: Renderer> Div<R> {
@@ -550,12 +518,18 @@ impl<'skip, R: Renderer> Div<R> {
         self.renderer.change_cursor(cursor);
         self
     }
+    
+    #[inline]
+    pub fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+        self.renderer.get_parent()
+    }
 
     #[inline]
     pub fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
         mut self,
         mut f: F,
     ) -> Self {
+        self.renderer.set_parent(&self.widget.size, &self.widget.pos);
         let w = f(W::inherit(
             &self.widget.size,
             &self.widget.pos,
@@ -594,24 +568,6 @@ impl<'skip, R: Renderer> Div<R> {
     }
 
     #[inline]
-    pub fn color<C: Into<Color>>(mut self, color: C) -> Self {
-        self.widget.color = color.into();
-        self
-    }
-
-    #[inline]
-    pub fn render(mut self) -> Self {
-        self.renderer.render_div(&self.widget);
-        self
-    }
-
-    #[inline]
-    pub fn rad(mut self, rad: f32) -> Self {
-        self.widget.rad = rad;
-        self
-    }
-
-    #[inline]
     pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.widget.pos.x)
@@ -649,76 +605,50 @@ impl<'skip, R: Renderer> Div<R> {
         pa.proc.consume(self, pa.arg)
     }
 
-    pub fn horizontal<F: FnMut(Horizontal<R>) -> W, W: Widget<'skip, R>>(
-        mut self,
-        mut f: F,
-    ) -> Self {
-        let w = f(Horizontal {
-            layout: Layout {
-                pos: (&self.widget.pos).into(),
-                offset: ().into(),
-                size: (&self.widget.size).into(),
-                gap: 0.0,
-            },
-            renderer: self.renderer,
-        });
-        self.renderer = w.renderer();
-        self
-    }
-
     #[inline]
-    pub fn vertical<F: FnMut(Vertical<R>) -> W, W: Widget<'skip, R>>(mut self, mut f: F) -> Self {
-        let w = f(Vertical {
-            layout: Layout {
-                pos: (&self.widget.pos).into(),
-                offset: ().into(),
-                size: (&self.widget.size).into(),
-                gap: 0.0,
-            },
-            renderer: self.renderer,
-        });
-        self.renderer = w.renderer();
-        self
-    }
-
-    #[inline]
-    pub fn clip<W: Widget<'skip, R>, F: FnMut(W) -> WO, WO: Widget<'skip, R>>(
+    pub fn clip<W: Widget<'skip, R>, F: FnMut(Self) -> Self>(
         mut self,
         mut f: F,
     ) -> Self {
         self.renderer.start_clip(&self.widget);
-        let w = f(W::inherit(
-            &self.widget.size,
-            &self.widget.pos,
-            self.renderer,
-        ));
-        self.renderer = w.renderer();
+        self = f(self); 
         self.renderer.end_clip();
         self
     }
+
     #[inline]
     pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(self, f: F) -> W {
         f(W::inherit(self.widget.size, self.widget.pos, self.renderer))
+    }
+
+    #[inline]
+    pub fn get_size(&mut self) -> Vec2<f32> {
+        self.size()
+    }
+
+    #[inline]
+    pub fn render<C: Into<Color>, Arg: Into<DivS<C>>>(mut self, arg: Arg) -> Self {
+        let arg = arg.into();
+        self.renderer.render_div(&self.widget, arg.color.into(), arg.rad);
+        self
     }
 }
 
 impl<'skip, R: Renderer> Text<'skip, R> {
     #[inline]
-    pub fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
-        mut self,
-        f: F,
-    ) -> Self {
-        let w = f(W::inherit(
-            self.renderer.text_size(&self.widget),
-            &self.widget.pos,
-            self.renderer,
-        ));
-        self.renderer = w.renderer();
-        self
+    pub fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+        self.renderer.get_parent()
     }
 
-
-
+    pub fn center(mut self) -> Self {
+        let (p_size, p_pos) = self.renderer.get_parent();
+        let size = self.get_size();
+        let center_pos: Vec2<_> = (p_pos.x + p_size.x / 2.0, p_pos.y + p_size.y / 2.0).into();
+        self.widget.pos.x = center_pos.x - size.x / 2.0;
+        self.widget.pos.y = center_pos.y + size.y / 2.0;
+        self
+    }
+ 
     #[inline]
     pub fn cursor(mut self, cursor: Cursor) -> Self {
         self.renderer.change_cursor(cursor);
@@ -737,6 +667,10 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self.widget.size = s;
         self.widget.pos.y += s;
         self
+    }
+
+    pub fn get_size(&mut self) -> Vec2<f32> {
+        self.size()
     }
 
     #[inline]
@@ -759,14 +693,8 @@ impl<'skip, R: Renderer> Text<'skip, R> {
     }
 
     #[inline]
-    pub fn color<C: Into<Color>>(mut self, color: C) -> Self {
-        self.widget.color = color.into();
-        self
-    }
-
-    #[inline]
-    pub fn render(mut self) -> Self {
-        self.renderer.render_text(&self.widget);
+    pub fn render<C: Into<Color>>(mut self, color: C) -> Self {
+        self.renderer.render_text(&self.widget, color.into());
         self
     }
     #[inline]
@@ -785,10 +713,10 @@ impl<'skip, R: Renderer> Text<'skip, R> {
 }
 
 pub trait Renderer {
-    fn render_text<'skip>(&mut self, text: &TextW<'skip>);
-    fn render_div(&mut self, div: &DivW);
-    fn render_img(&mut self, img: &ImageW);
-    fn render_circle(&mut self, circle: &CircleW);
+    fn render_text<'skip>(&mut self, text: &TextW<'skip>, color: Color);
+    fn render_div(&mut self, div: &DivW, color: Color, radius: f32);
+    fn render_img(&mut self, img: &ImageW, color: Color, image_id: ImageId);
+    fn render_circle(&mut self, circle: &CircleW, color: Color);
     fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
     fn start_clip(&mut self, dim: &DivW);
     fn mouse_pos(&mut self) -> Vec2<f32>;
@@ -796,6 +724,8 @@ pub trait Renderer {
     fn end_clip(&mut self);
     fn canvas_size(&mut self) -> Vec2<f32>;
     fn change_cursor(&mut self, cursor: Cursor);
+    fn set_parent<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>>(&mut self, dim: Dim, pos: Pos);
+    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>);
 }
 
 pub trait Proc<'skip, R: Renderer> {
@@ -813,7 +743,6 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Circle<R> {
     fn inherit<P: Into<Vec2<f32>>, PO: Into<Vec2<f32>>>(dim: P, pos: PO, renderer: R) -> Self {
         Self { widget: CircleW { 
             radius: dim.into().x / 2.0, 
-            color: ().into(), 
             pos: pos.into() 
         }, renderer }
     }
@@ -829,11 +758,9 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Image<R> {
     #[inline]
     fn inherit<P: Into<Vec2<f32>>, PO: Into<Vec2<f32>>>(dim: P, pos: PO, renderer: R) -> Self {
         Self {
-            widget: ImageW {
-                image_id: 0,
+            widget: ImageW { 
                 pos: pos.into(),
-                size: dim.into(),
-                tint: ().into(),
+                size: dim.into(), 
             },
             renderer,
         }
@@ -907,9 +834,7 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Div<R> {
     }
     #[inline]
     fn inherit<P: Into<Vec2<f32>>, PO: Into<Vec2<f32>>>(dim: P, pos: PO, renderer: R) -> Self {
-        let mut widget: DivW = ().into();
-        widget.pos = pos.into();
-        widget.size = dim.into();
+        let widget: DivW = DivW { size: dim.into(),pos: pos.into() };
         Self { widget, renderer }
     }
     #[inline]
@@ -958,6 +883,25 @@ pub enum Key {
     Unknown
 }
 
+struct DivS<Color: Into<crate::Color>> {
+    pub color: Color,
+    pub rad: f32,
+}
+
+impl<C: Into<crate::Color>> From<C> for DivS<C> {
+    fn from(value: C) -> Self {
+        Self { color: value, rad: 0.0 }
+    }
+}
+
+impl<C: Into<crate::Color>> From<(C, f32)> for DivS<C> {
+    fn from(value: (C, f32)) -> Self {
+        Self { color: value.0, rad: value.1 }
+    }
+}
+
+
+
 #[derive(Debug)]
 pub struct Vec2<T> {
     pub x: T,
@@ -996,8 +940,7 @@ impl<'skip> From<()> for TextW<'skip> {
         Self {
             text: "",
             font_id: 0,
-            size: 0.0,
-            color: ().into(),
+            size: 0.0, 
             pos: ().into(),
         }
     }
@@ -1017,69 +960,6 @@ impl<Iter: Iterator> From<(Iter)> for IterArg<Iter> {
     }
 }
 
-
-
-impl From<(ImageId)> for ImageW {
-    #[inline]
-    fn from(value: (ImageId)) -> Self {
-        Self {
-            image_id: value,
-            pos: ().into(),
-            size: ().into(),
-            tint: ().into(),
-        }
-    }
-}
-
-impl<C: Into<Color>> From<(ImageId, C)> for ImageW {
-    #[inline]
-    fn from(value: (ImageId, C)) -> Self {
-        Self {
-            image_id: value.0,
-            pos: ().into(),
-            size: ().into(),
-            tint: value.1.into(),
-        }
-    }
-}
-
-impl From<()> for DivW {
-    #[inline]
-    fn from(_value: ()) -> Self {
-        Self {
-            size: ().into(),
-            rad: 0.0,
-            color: ().into(),
-            pos: ().into(),
-        }
-    }
-}
-
-impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>> From<(Dim, Pos)> for DivW {
-    #[inline]
-    fn from(value: (Dim, Pos)) -> Self {
-        Self {
-            size: value.0.into(),
-            rad: 0.0,
-            color: ().into(),
-            pos: value.1.into(),
-        }
-    }
-}
-
-impl<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>, Col: Into<Color>> From<(Dim, Pos, f32, Col)>
-    for DivW
-{
-    #[inline]
-    fn from(value: (Dim, Pos, f32, Col)) -> Self {
-        Self {
-            size: value.0.into(),
-            rad: value.2,
-            color: value.3.into(),
-            pos: value.1.into(),
-        }
-    }
-}
 
 impl<T> From<(T, T)> for Vec2<T> {
     #[inline]

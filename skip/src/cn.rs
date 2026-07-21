@@ -14,10 +14,10 @@ impl<'skip,R: crate::Renderer, Color: Into<crate::Color>, Thickness: Into<Vec2<f
         widget
             .child(|div: Div<_>| {
                 div
-                    .color(col)
+                    //.color(col)
                     .enlarge((large.x * 2.0, large.y * 2.0))
                     .padding(pad)
-                    .render()
+                    .render(col)
             })
     }
 }
@@ -55,20 +55,20 @@ impl<'skip, R: Renderer> Proc<'skip, R> for &'skip mut TextBox {
             .font_id(font)
             .size(size)
             .text(&self.text[0..self.insert_idx])
-            .render()
+            .render(&color)
         })
         .add(|cursor: Div<_>| {
             cursor
             .size((1.0, size))
-            .color(&color)
-            .render()
+            //.color(&color)
+            .render(&color)
         })
         .add(|text: Text<_>| {
             text
             .font_id(font)
             .size(size)
             .text(&self.text[self.insert_idx..self.text.len()])
-            .render()
+            .render(&color)
         })
     }
 }

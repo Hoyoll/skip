@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Circle, Div, Font, Horizontal, Mouse, Proc, State, Text};
+use skip::{Circle, Div, Font, Horizontal, Mouse, Proc, State, Text, Vertical};
 use skip_skia::{AppController, Canvas, Event};
 
 enum Color {
@@ -96,15 +96,13 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
 
    fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget {
        widget
-        .render()
+        .render(Color::UiBg)
         .child(|text: Text<_>| {
             text
             .font_id(argv)
-
             .size(80.0f32)
-            .color(Color::Light)
             .text(&self.text)
-            .render()
+            .render(Color::Light)
         })
    } 
 }
@@ -144,26 +142,23 @@ impl AppController<Message> for Calc {
         .add(|background: Div<_>| {
             background
             .size(&win)
-            .color(Color::Background)
-            .render()
+            .render(Color::Background)
             .hover(|pos, background| {
                 background
                 .child(|circle: Circle<_>| {
                     circle
                     .pos(&pos)
                     .radius(height / 2.0)
-                    .color(Color::Light)
-                    .render()
+                    .render(Color::Light)
                 })
             })
-            .vertical(|layout| {
+            .child(|layout: Vertical<_>| {
                 layout
                 .padding((gap / 2.0, 1.0))
                 .gap(gap)
                 .add(|text_box: Div<_>| {
                     text_box
                     .size((win.x - gap, height))
-                    .color(Color::UiBg)
                     .proc(BORDER)
                     .proc((&mut self.context.text_input, self.context.fira_code))
                 })
@@ -173,33 +168,26 @@ impl AppController<Message> for Calc {
                     .iter((BUTTONS.iter(), 4), |button: Div<_>, btn| {
                         let mut text_color = Color::Fg;
                         button
-                        .color(Color::UiBg)
                         .size((width, height))
                         .proc(BORDER)
-                        .render()
+                        .render(Color::UiBg)
                         .on(|on| {
                            match on {
                                (Mouse::Left, State::Pressed) => self.context.text_input.accept(btn),
                                 _ => ()
                            } 
                         })
-                        //.cursor(Cursor::Default)
                         .hover(|_,div| {
                             text_color = Color::Light;
-                            //div.cursor(Cursor::Pointer)
                             div
                         })  
                         .child(|label: Text<_>| {
-                            let pad_x = (width / 2.0) - (width / 15.0);
-                            let pad_y = height / 2.0 - height / 4.0; 
-                            //let pad = (pad_x,pad_y); 
                             label
-                            .padding((pad_x, pad_y))
-                            .color(&text_color)
                             .size(40.0f32)
                             .font_id(self.context.fira_code)
                             .text(btn.get_text())
-                            .render()
+                            .center()
+                            .render(&text_color)
                         })
                     })
                 })

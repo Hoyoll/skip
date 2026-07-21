@@ -11,6 +11,7 @@ use glutin::{
     surface::GlSurface,
 };
 use raw_window_handle::HasWindowHandle;
+use skip::Vec2;
 pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
     let event_loop: winit::event_loop::EventLoop<Event> =
         winit::event_loop::EventLoop::with_user_event()
@@ -81,13 +82,24 @@ pub struct Canvas<'skip> {
     images: &'skip Vec<skia_safe::Image>,
     window: &'skip mut winit::window::Window,
     window_dim: skip::Vec2<f32>,
+    p_pos: Vec2<f32>,
+    p_dim: Vec2<f32>,
 }
 
 impl<'a> skip::Renderer for Canvas<'a> {
+    fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(&mut self, dim: Dim, pos: Pos) {
+        self.p_pos = pos.into();
+        self.p_dim = dim.into();
+    }
+
+    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+        ((self.p_dim.x, self.p_dim.y).into(), (self.p_pos.x, self.p_pos.y).into())
+    }
+
     fn canvas_size(&mut self) -> skip::Vec2<f32> {
         (&self.window_dim).into()
     }
-    fn render_div(&mut self, div: &skip::DivW) {
+    fn render_div(&mut self, div: &skip::DivW, color: skip::Color, radius: f32) {
         let right = div.pos.x + div.size.x;
         let bottom = div.pos.y + div.size.y;
 
@@ -102,25 +114,27 @@ impl<'a> skip::Renderer for Canvas<'a> {
         //dbg!(div);
         //println!("draw!");
         self.paint
-            .set_argb(div.color.a, div.color.r, div.color.g, div.color.b);
+            .set_argb(color.a, color.r, color.g, color.b);
         self.canvas.draw_round_rect(
             skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.size.x, div.size.y),
-            div.rad,
-            div.rad,
+            radius,
+            radius,
             self.paint,
         );
-    }
 
-    fn render_circle(&mut self, circle: &skip::CircleW) {
+    }
+    fn render_circle(&mut self, circle: &skip::CircleW, color: skip::Color) {
         self.paint.set_argb(
-            circle.color.a,
-            circle.color.r,
-            circle.color.g,
-            circle.color.b,
+            color.a,
+            color.r,
+            color.g,
+            color.b,
         );
         self.canvas
             .draw_circle((circle.pos.x, circle.pos.y), circle.radius, self.paint);
+
     }
+    
     #[inline]
     fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
         if text.text == "" {
@@ -131,7 +145,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
         (rect.width(), rect.height()).into()
     }
 
-    fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>) {
+    fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
         if text.text == "" {
             return;
         }
@@ -146,13 +160,14 @@ impl<'a> skip::Renderer for Canvas<'a> {
             return;
         }
         self.paint
-            .set_argb(text.color.a, text.color.r, text.color.g, text.color.b);
+            .set_argb(color.a, color.r, color.g, color.b);
         let font = self.fonts[text.font_id].set_size(text.size);
         self.canvas
             .draw_str(text.text, (text.pos.x, text.pos.y), font, self.paint);
+    
     }
 
-    fn render_img(&mut self, img: &skip::ImageW) {
+    fn render_img(&mut self, img: &skip::ImageW, tint: skip::Color, image_id: skip::ImageId) {
         let right = img.pos.x + img.size.x;
         let bottom = img.pos.y + img.size.y;
 
@@ -163,10 +178,10 @@ impl<'a> skip::Renderer for Canvas<'a> {
         {
             return;
         }
-        match self.images.get(img.image_id) {
+        match self.images.get(image_id) {
             Some(image) => {
                 self.paint
-                    .set_argb(img.tint.a, img.tint.r, img.tint.g, img.tint.b);
+                    .set_argb(tint.a, tint.r, tint.g, tint.b);
                 self.canvas.draw_image_rect(
                     image,
                     None,
@@ -176,8 +191,8 @@ impl<'a> skip::Renderer for Canvas<'a> {
             }
             None => (),
         }
+ 
     }
-
     fn start_clip(&mut self, dim: &skip::DivW) {
         self.canvas.save();
         let rect = skia_safe::Rect::from_xywh(dim.pos.x, dim.pos.y, dim.size.x, dim.size.y);
@@ -523,6 +538,8 @@ impl<T: 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
                             images: &self.images,
                             window: &mut window.window,
                             window_dim: (window_dim.width as f32, window_dim.height as f32).into(),
+                            p_pos: ().into(),
+                            p_dim: ().into(),
                         }),
                     );
 
