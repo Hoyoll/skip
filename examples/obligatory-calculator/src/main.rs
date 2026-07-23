@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Circle, Div, Font, Horizontal, Mouse, Proc, State, Text, Vertical};
+use skip::{Circle, Div, Font, Horizontal, Mouse, Plain, Proc, State, Text, Vertical};
 use skip_skia::{AppController, Canvas, Event};
 
 enum Color {
@@ -61,7 +61,7 @@ const BUTTONS: [Button; 16] = [
     Button::Number("1"), Button::Number("2"), Button::Number("3"), Button::Operand("+"),
     Button::Number("4"), Button::Number("5"), Button::Number("6"), Button::Operand("-"),
     Button::Number("7"), Button::Number("8"), Button::Number("9"), Button::Operand("*"),
-    Button::Action("_"), Button::Number("0"),Button::Action("="), Button::Operand("/")
+    Button::Action("<="), Button::Number("0"),Button::Action("="), Button::Operand("/")
 ];
 
 struct TextInput {
@@ -96,13 +96,19 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
 
    fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget {
        widget
-        .render(Color::UiBg)
+        .render::<Plain<_>>(Color::UiBg)
         .child(|text: Text<_>| {
             text
-            .font_id(argv)
             .size(80.0f32)
+            .font_id(argv)
             .text(&self.text)
+            //.child(|div: Div<_>| {
+            //    div
+            //    .proc(BORDER)
+            //    .render::<Plain<_>>(Color::UiBg) 
+            //})
             .render(Color::Light)
+
         })
    } 
 }
@@ -142,7 +148,7 @@ impl AppController<Message> for Calc {
         .add(|background: Div<_>| {
             background
             .size(&win)
-            .render(Color::Background)
+            .render::<Plain<_>>(Color::Background)
             .hover(|pos, background| {
                 background
                 .child(|circle: Circle<_>| {
@@ -170,7 +176,7 @@ impl AppController<Message> for Calc {
                         button
                         .size((width, height))
                         .proc(BORDER)
-                        .render(Color::UiBg)
+                        .render::<Plain<_>>(Color::UiBg)
                         .on(|on| {
                            match on {
                                (Mouse::Left, State::Pressed) => self.context.text_input.accept(btn),
@@ -183,12 +189,17 @@ impl AppController<Message> for Calc {
                         })  
                         .child(|label: Text<_>| {
                             label
-                            .size(40.0f32)
+                            .size(50.0f32)
                             .font_id(self.context.fira_code)
                             .text(btn.get_text())
                             .center()
+                            //.child(|div: Div<_>| {
+                            //    div
+                            //    .proc(BORDER)
+                            //    .render::<Plain<_>>(Color::UiBg) 
+                            //})
                             .render(&text_color)
-                        })
+                       })
                     })
                 })
             })

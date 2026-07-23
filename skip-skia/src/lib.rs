@@ -140,9 +140,13 @@ impl<'a> skip::Renderer for Canvas<'a> {
         if text.text == "" {
             ().into()
         }
-        let fonts = &self.fonts[text.font_id];
+        let fonts = &mut self.fonts[text.font_id];
+        fonts.set_size(text.size);
+        //let metric = fonts.metrics();
         let (_, rect) = fonts.measure_str(text.text, None);
-        (rect.width(), rect.height()).into()
+        let height = rect.height().ceil() + text.size / 10.0;
+        let width = rect.width().ceil() + text.size / 10.0;
+        (width, height).into()
     }
 
     fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
@@ -161,13 +165,16 @@ impl<'a> skip::Renderer for Canvas<'a> {
         }
         self.paint
             .set_argb(color.a, color.r, color.g, color.b);
-        let font = self.fonts[text.font_id].set_size(text.size);
+        let font = &self.fonts[text.font_id];
+        let metrics = font.metrics();
+        const MOD: f32 = 4.0;
+        let baseline_y = text.pos.y - metrics.1.ascent - text.size / MOD;
         self.canvas
-            .draw_str(text.text, (text.pos.x, text.pos.y), font, self.paint);
+            .draw_str(text.text, (text.pos.x - MOD, baseline_y), font, self.paint);
     
     }
 
-    fn render_img(&mut self, img: &skip::ImageW, tint: skip::Color, image_id: skip::ImageId) {
+    fn render_img(&mut self, img: &skip::DivW, tint: skip::Color, image_id: skip::ImageId) {
         let right = img.pos.x + img.size.x;
         let bottom = img.pos.y + img.size.y;
 
