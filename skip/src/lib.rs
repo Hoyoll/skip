@@ -44,7 +44,6 @@ pub struct Div<R: Renderer> {
     renderer: R,
 }
 
-#[derive(Debug)]
 pub struct DivW {
     pub size: Vec2<f32>,
     pub pos: Vec2<f32>,
@@ -127,10 +126,8 @@ impl<'skip, R: Renderer> Horizontal<R> {
         pa.proc.consume(self, pa.arg)
     }
 
-    #[inline]
-    pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
+    pub fn on<On: crate::On<'skip, R, Self, Out = Self>, F: FnMut(On::Arg<'_>) -> On::FnOut>(mut self, f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
-        let mouse = self.renderer.mouse_state();
         let hovered = (mouse_pos.x >= self.layout.pos.x)
             && (mouse_pos.y >= self.layout.pos.y)
             && (mouse_pos.x <= (self.layout.pos.x + self.layout.size.x))
@@ -138,25 +135,8 @@ impl<'skip, R: Renderer> Horizontal<R> {
         if !hovered {
             return self;
         }
-        for on in mouse {
-            f(on);
-        }
-        self
+        On::call(f, self, mouse_pos) 
     }
-
-    #[inline]
-    pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
-        let mouse_pos = self.renderer.mouse_pos();
-        let hovered = (mouse_pos.x >= self.layout.pos.x)
-            && (mouse_pos.y >= self.layout.pos.y)
-            && (mouse_pos.x <= (self.layout.pos.x + self.layout.size.x))
-            && (mouse_pos.y <= (self.layout.pos.y + self.layout.size.y));
-        if hovered {
-            return f(mouse_pos, self);
-        }
-        self
-    }
-
     pub fn canvas_size(&mut self) -> Vec2<f32> {
         self.renderer.canvas_size()
     }
@@ -327,9 +307,9 @@ impl<'skip, R: Renderer> Vertical<R> {
         }
         self
     }
-    pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
+
+    pub fn on<On: crate::On<'skip, R, Self, Out = Self>, F: FnMut(On::Arg<'_>) -> On::FnOut>(mut self, f: F) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
-        let mouse = self.renderer.mouse_state();
         let hovered = (mouse_pos.x >= self.layout.pos.x)
             && (mouse_pos.y >= self.layout.pos.y)
             && (mouse_pos.x <= (self.layout.pos.x + self.layout.size.x))
@@ -337,23 +317,7 @@ impl<'skip, R: Renderer> Vertical<R> {
         if !hovered {
             return self;
         }
-        for on in mouse {
-            f(on);
-        }
-        self
-    }
-
-    #[inline]
-    pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
-        let mouse_pos = self.renderer.mouse_pos();
-        let hovered = (mouse_pos.x >= self.layout.pos.x)
-            && (mouse_pos.y >= self.layout.pos.y)
-            && (mouse_pos.x <= (self.layout.pos.x + self.layout.size.x))
-            && (mouse_pos.y <= (self.layout.pos.y + self.layout.size.y));
-        if hovered {
-            return f(mouse_pos, self);
-        }
-        self
+        On::call(f, self, mouse_pos) 
     }
 
     pub fn canvas_size(&mut self) -> Vec2<f32> {
@@ -449,36 +413,7 @@ impl<'skip, R: Renderer> Div<R> {
         self.widget.size.y += size.y;
         self
     }
-
-    #[inline]
-    pub fn hover<F: FnMut(Vec2<f32>, Self) -> Self>(mut self, mut f: F) -> Self {
-        let mouse_pos = self.renderer.mouse_pos();
-        let hovered = (mouse_pos.x >= self.widget.pos.x)
-            && (mouse_pos.y >= self.widget.pos.y)
-            && (mouse_pos.x <= (self.widget.pos.x + self.widget.size.x))
-            && (mouse_pos.y <= (self.widget.pos.y + self.widget.size.y));
-        if hovered {
-            return f(mouse_pos, self);
-        }
-        self
-    }
-
-    pub fn on<F: FnMut(&On)>(mut self, mut f: F) -> Self {
-        let mouse_pos = self.renderer.mouse_pos();
-        let hovered = (mouse_pos.x >= self.widget.pos.x)
-            && (mouse_pos.y >= self.widget.pos.y)
-            && (mouse_pos.x <= (self.widget.pos.x + self.widget.size.x))
-            && (mouse_pos.y <= (self.widget.pos.y + self.widget.size.y));
-        if !hovered {
-            return self;
-        }
-        let mouse = self.renderer.mouse_state();
-        for on in mouse {
-            f(on);
-        }
-        self
-    }
-
+    
     #[inline]
     pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
         self,
@@ -510,19 +445,85 @@ impl<'skip, R: Renderer> Div<R> {
     }
 
     #[inline]
-    pub fn align(mut self, align: impl Align, apply: impl Apply) -> Self {
-        let res = align.calc(self.get_parent(), self.get_size());
-        apply.apply(res, &mut self.widget.pos);
+    pub fn align<Align: crate::Align, Apply: crate::Apply>(mut self) -> Self {
+        let res = Align::calc(self.get_parent(), self.get_size());
+        Apply::apply(res, &mut self.widget.pos);
         self
     }
-
     #[inline]
     pub fn render<Style: crate::Style>(mut self, style: impl Into<Style>) -> Self {
         style.into().render(&self.widget, &mut self.renderer);
         self
-    } 
+    }
 
+    pub fn on<On: crate::On<'skip, R, Self, Out = Self>, F: FnMut(On::Arg<'_>) -> On::FnOut>(mut self, f: F) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let hovered = (mouse_pos.x >= self.widget.pos.x)
+            && (mouse_pos.y >= self.widget.pos.y)
+            && (mouse_pos.x <= (self.widget.pos.x + self.widget.size.x))
+            && (mouse_pos.y <= (self.widget.pos.y + self.widget.size.y));
+        if !hovered {
+            return self;
+        }
+        On::call(f, self, mouse_pos) 
+    }
 }
+
+
+pub trait Child {
+}
+
+pub struct Clip;
+
+pub struct Leak;
+
+pub trait On<'skip, R: Renderer, W: Widget<'skip, R>> {
+    type Out;
+    type FnOut;
+    type Arg<'a>;
+    fn call<F>(f: F, widget: W, cursor_pos: Vec2<f32>) -> Self::Out
+    where
+        F: for<'a> FnMut(Self::Arg<'a>) -> Self::FnOut;
+    //fn call<F: FnMut(Self::Arg<'a>) -> Self::FnOut>(f: F, widget: W, cursor_pos: Vec2<f32>) -> Self::Out;
+}
+
+pub struct Hover;
+
+impl<'skip, R: Renderer, W: Widget<'skip, R>> On<'skip, R, W> for Hover { 
+    type Arg<'a> = (Vec2<f32>, W);
+
+    type Out = W;
+    type FnOut = W;
+
+    fn call<F>(
+        mut f: F,
+        widget: W,
+        cursor_pos: Vec2<f32>,
+    ) -> Self::Out
+    where
+        F: for<'a> FnMut(Self::Arg<'a>) -> Self::FnOut,
+    {
+        f((cursor_pos, widget))
+    } 
+}
+
+pub struct Keys;
+
+impl<'skip, R: Renderer, W: Widget<'skip, R>> On<'skip, R, W> for Keys {
+    type Out = W;
+    //type Arg = &(Mouse, State);
+    type FnOut = ();
+    
+    type Arg<'a> = &'a (Mouse, State);
+
+    fn call<F>(mut f: F, widget: W, _cursor_pos: Vec2<f32>) -> Self::Out
+    where
+        F: for<'a> FnMut(Self::Arg<'a>) -> Self::FnOut,
+    {
+        widget.iter_mouse(f);
+        widget
+    }
+} 
 
 pub trait Style {
     fn render<R: Renderer>(self, div: &DivW, renderer: &mut R);
@@ -668,21 +669,21 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         f(W::inherit(self.renderer.text_size(&self.widget), self.widget.pos, self.renderer))
     }
 
-    pub fn align(mut self, align: impl Align, apply: impl Apply) -> Self {
-        let res = align.calc(self.get_parent(), self.get_size());
-        apply.apply(res, &mut self.widget.pos);
+    pub fn align<Align: crate::Align, Apply: crate::Apply>(mut self) -> Self {
+        let res = Align::calc(self.get_parent(), self.get_size());
+        Apply::apply(res, &mut self.widget.pos);
         self
     }
 }
 
 pub trait Align {
-    fn calc(self, parent: impl Into<(Vec2<f32>, Vec2<f32>)>, child_dim: impl Into<Vec2<f32>>) -> Vec2<f32>;
+    fn calc(parent: impl Into<(Vec2<f32>, Vec2<f32>)>, child_dim: impl Into<Vec2<f32>>) -> Vec2<f32>;
 }
 
 pub struct Center;
 
 impl Align for Center {
-    fn calc(self, parent: impl Into<(Vec2<f32>, Vec2<f32>)>, child_dim: impl Into<Vec2<f32>>) -> Vec2<f32> {
+    fn calc(parent: impl Into<(Vec2<f32>, Vec2<f32>)>, child_dim: impl Into<Vec2<f32>>) -> Vec2<f32> {
         let (p_size, p_pos) = parent.into();
         let size = child_dim.into();
         let center_pos: Vec2<_> = (p_pos.x + p_size.x / 2.0, p_pos.y + p_size.y / 2.0).into();
@@ -693,7 +694,7 @@ impl Align for Center {
 pub struct End;
 
 impl Align for End {
-    fn calc(self, parent: impl Into<(Vec2<f32>, Vec2<f32>)>, child_dim: impl Into<Vec2<f32>>) -> Vec2<f32> {
+    fn calc(parent: impl Into<(Vec2<f32>, Vec2<f32>)>, child_dim: impl Into<Vec2<f32>>) -> Vec2<f32> {
         let (p_size, p_pos) = parent.into();
         let size = child_dim.into();
         let end_pos: Vec2<_> = (p_pos.x + p_size.x, p_pos.y + p_size.y).into();
@@ -704,13 +705,13 @@ impl Align for End {
 pub struct Start;
 
 impl Align for Start {
-    fn calc(self, parent: impl Into<(Vec2<f32>, Vec2<f32>)>, _child_dim: impl Into<Vec2<f32>>) -> Vec2<f32> {
+    fn calc(parent: impl Into<(Vec2<f32>, Vec2<f32>)>, _child_dim: impl Into<Vec2<f32>>) -> Vec2<f32> {
         parent.into().1
     }
 }
 
 pub trait Apply {
-    fn apply(self, new_coord: Vec2<f32>, coord: &mut Vec2<f32>);
+    fn apply(new_coord: Vec2<f32>, coord: &mut Vec2<f32>);
 }
 
 pub struct X;
@@ -720,20 +721,20 @@ pub struct Y;
 pub struct XY;
 
 impl Apply for XY {
-    fn apply(self, new_coord: Vec2<f32>, coord: &mut Vec2<f32>) {
+    fn apply(new_coord: Vec2<f32>, coord: &mut Vec2<f32>) {
         *coord = new_coord;
     }
 }
 
 impl Apply for X {
-    fn apply(self, new_coord: Vec2<f32>, coord: &mut Vec2<f32>) {
+    fn apply(new_coord: Vec2<f32>, coord: &mut Vec2<f32>) {
         coord.x = new_coord.x;
     }
 }
 
 
 impl Apply for Y {
-    fn apply(self, new_coord: Vec2<f32>, coord: &mut Vec2<f32>) {
+    fn apply(new_coord: Vec2<f32>, coord: &mut Vec2<f32>) {
         coord.y = new_coord.y;
     }
 }
@@ -746,12 +747,13 @@ pub trait Renderer {
     fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
     fn start_clip(&mut self, dim: &DivW);
     fn mouse_pos(&mut self) -> Vec2<f32>;
-    fn mouse_state(&mut self) -> &Vec<On>;
+    //fn mouse_state(&mut self) -> &Vec<(Mouse, State)>;
     fn end_clip(&mut self);
     fn canvas_size(&mut self) -> Vec2<f32>;
     fn change_cursor(&mut self, cursor: Cursor);
     fn set_parent<Dim: Into<Vec2<f32>>, Pos: Into<Vec2<f32>>>(&mut self, dim: Dim, pos: Pos);
     fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>);
+    fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, f: F);
 }
 
 pub trait Proc<'skip, R: Renderer> {
@@ -777,6 +779,10 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Circle<R> {
     }
     fn size(&mut self) -> Vec2<f32> {
         (self.widget.radius, self.widget.radius).into()
+    }
+
+    fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, f: F) {
+        self.renderer.iter_mouse(f);
     }
 }
 
@@ -804,6 +810,11 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Horizontal<R> {
     fn size(&mut self) -> Vec2<f32> {
         (&self.layout.size).into()
     }
+
+    fn iter_mouse<F: FnMut(& (Mouse, State))>(&self, f: F) {
+        self.renderer.iter_mouse(f);
+    }
+
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R> for Vertical<R> {
@@ -828,6 +839,10 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Vertical<R> {
     fn size(&mut self) -> Vec2<f32> {
         (&self.layout.size).into()
     }
+
+    fn iter_mouse<F: FnMut(& (Mouse, State))>(&self, f: F) {
+        self.renderer.iter_mouse(f);
+    } 
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R> for Div<R> {
@@ -844,6 +859,9 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Div<R> {
     fn size(&mut self) -> Vec2<f32> {
         (self.widget.size.x, self.widget.size.y).into()
     }
+    fn iter_mouse<F: FnMut(& (Mouse, State))>(&self, f: F) {
+        self.renderer.iter_mouse(f);
+    } 
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R> for Text<'skip, R> {
@@ -862,9 +880,11 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Text<'skip, R> {
     fn size(&mut self) -> Vec2<f32> {
         self.renderer.text_size(&self.widget)
     }
-}
 
-pub type On = (Mouse, State);
+    fn iter_mouse<F: FnMut(& (Mouse, State))>(&self, f: F) {
+        self.renderer.iter_mouse(f);
+    } 
+}
 
 pub enum State {
     Pressed,

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Circle, Div, Font, Horizontal, Mouse, Plain, Proc, State, Text, Vertical};
+use skip::{Center, Circle, Div, End, Font, Horizontal, Hover, Keys, Mouse, Plain, Proc, State, Text, Vec2, Vertical, X, XY, Y};
 use skip_skia::{AppController, Canvas, Event};
 
 enum Color {
@@ -96,7 +96,7 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
 
    fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget {
        widget
-        .render::<Plain<_>>(Color::UiBg)
+        .render::<Plain<_>>(Color::UiBg) 
         .child(|text: Text<_>| {
             text
             .size(80.0f32)
@@ -107,6 +107,8 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
             //    .proc(BORDER)
             //    .render::<Plain<_>>(Color::UiBg) 
             //})
+            .align::<End, X>()
+            .align::<Center, Y>()
             .render(Color::Light)
 
         })
@@ -149,7 +151,7 @@ impl AppController<Message> for Calc {
             background
             .size(&win)
             .render::<Plain<_>>(Color::Background)
-            .hover(|pos, background| {
+            .on::<Hover,_>(|(pos, background)| {
                 background
                 .child(|circle: Circle<_>| {
                     circle
@@ -177,13 +179,13 @@ impl AppController<Message> for Calc {
                         .size((width, height))
                         .proc(BORDER)
                         .render::<Plain<_>>(Color::UiBg)
-                        .on(|on| {
+                        .on::<Keys,_>(|on| {
                            match on {
                                (Mouse::Left, State::Pressed) => self.context.text_input.accept(btn),
                                 _ => ()
                            } 
                         })
-                        .hover(|_,div| {
+                        .on::<Hover,_>(|(_, div)| {
                             text_color = Color::Light;
                             div
                         })  
@@ -192,7 +194,7 @@ impl AppController<Message> for Calc {
                             .size(50.0f32)
                             .font_id(self.context.fira_code)
                             .text(btn.get_text())
-                            .center()
+                            .align::<Center, XY>()
                             //.child(|div: Div<_>| {
                             //    div
                             //    .proc(BORDER)

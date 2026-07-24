@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{Proc, Renderer, Vec2};
+use crate::{Mouse, Proc, Renderer, State, Vec2};
 
 pub(crate) struct ProcArg<'skip, R: Renderer, P: Proc<'skip, R>> {
     pub proc: P,
@@ -12,4 +12,6 @@ pub(crate) trait Widget<'skip, R: Renderer> {
     fn inherit<P: Into<Vec2<f32>>, PO: Into<Vec2<f32>>>(dim: P, pos: PO, renderer: R) -> Self;
     fn renderer(self) -> R;
     fn size(&mut self) -> Vec2<f32>;
+    //fn mouse_state(&mut self) -> &Vec<(Mouse, State)>;
+    fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, f: F);
 }

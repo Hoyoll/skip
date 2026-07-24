@@ -11,7 +11,7 @@ use glutin::{
     surface::GlSurface,
 };
 use raw_window_handle::HasWindowHandle;
-use skip::Vec2;
+use skip::{Mouse, State, Vec2};
 pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
     let event_loop: winit::event_loop::EventLoop<Event> =
         winit::event_loop::EventLoop::with_user_event()
@@ -73,7 +73,7 @@ struct Window {
 }
 
 pub struct Canvas<'skip> {
-    on: &'skip Vec<skip::On>,
+    on: &'skip Vec<(Mouse, State)>,
     mouse_pos: &'skip skip::Vec2<f32>,
     //key: &'skip Vec<skip::Key>,
     canvas: &'skip skia_safe::Canvas,
@@ -87,6 +87,11 @@ pub struct Canvas<'skip> {
 }
 
 impl<'a> skip::Renderer for Canvas<'a> {
+    fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, mut f: F) {
+        for key in self.on {
+            f(key)
+        }
+    }
     fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(&mut self, dim: Dim, pos: Pos) {
         self.p_pos = pos.into();
         self.p_dim = dim.into();
@@ -214,10 +219,6 @@ impl<'a> skip::Renderer for Canvas<'a> {
         (self.mouse_pos).into()
     }
 
-    fn mouse_state(&mut self) -> &Vec<skip::On> {
-        self.on
-    }
-
     fn change_cursor(&mut self, cursor: skip::Cursor) {
         use winit::window::Cursor::*;
         use winit::window::CursorIcon::*;
@@ -231,7 +232,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
 
 struct WinitRenderer<T: 'static, A: AppController<T>> {
     windows: HashMap<winit::window::WindowId, Window>,
-    on: Vec<skip::On>,
+    on: Vec<(Mouse, State)>,
     //key: Vec<skip::Key>,
     mouse_pos: skip::Vec2<f32>,
     current_focus: winit::window::WindowId,
