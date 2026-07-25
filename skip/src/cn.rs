@@ -1,4 +1,4 @@
-use crate::{Color, Div, Font, Horizontal, Plain, Proc, Renderer, Text, Vec2};
+use crate::{Color, Div, Font, Horizontal, Leak, Plain, Proc, Renderer, Text, Vec2};
 
 pub struct Border<Color: Into<crate::Color>, Thickness: Into<Vec2<f32>>, Offset: Into<Vec2<f32>>>(pub Color, pub Thickness, pub Offset);
 
@@ -11,7 +11,7 @@ impl<'skip,R: crate::Renderer, Color: Into<crate::Color>, Thickness: Into<Vec2<f
         pad.x -= large.x;
         pad.y -= large.y;
         widget
-            .child(|div: Div<_>| {
+            .child(Leak, |div: Div<_>| {
                 div
                 .enlarge((large.x * 2.0, large.y * 2.0))
                 .padding(pad)

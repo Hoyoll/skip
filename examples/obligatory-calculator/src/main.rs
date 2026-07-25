@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Center, Circle, Div, End, Font, Horizontal, Hover, Keys, Mouse, Plain, Proc, State, Text, Vec2, Vertical, X, XY, Y};
+use skip::{Center, Circle, Div, End, Font, Horizontal, Hover, Keys, Leak, Mouse, Plain, Proc, State, Text, Vec2, Vertical, X, XY, Y};
 use skip_skia::{AppController, Canvas, Event};
 
 enum Color {
@@ -97,16 +97,11 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
    fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget {
        widget
         .render::<Plain<_>>(Color::UiBg) 
-        .child(|text: Text<_>| {
+        .child(Leak,|text: Text<_>| {
             text
             .size(80.0f32)
             .font_id(argv)
             .text(&self.text)
-            //.child(|div: Div<_>| {
-            //    div
-            //    .proc(BORDER)
-            //    .render::<Plain<_>>(Color::UiBg) 
-            //})
             .align::<End, X>()
             .align::<Center, Y>()
             .render(Color::Light)
@@ -153,14 +148,14 @@ impl AppController<Message> for Calc {
             .render::<Plain<_>>(Color::Background)
             .on::<Hover,_>(|(pos, background)| {
                 background
-                .child(|circle: Circle<_>| {
+                .child(Leak, |circle: Circle<_>| {
                     circle
                     .pos(&pos)
                     .radius(height / 2.0)
                     .render(Color::Light)
                 })
             })
-            .child(|layout: Vertical<_>| {
+            .child(Leak, |layout: Vertical<_>| {
                 layout
                 .padding((gap / 2.0, 1.0))
                 .gap(gap)
@@ -189,7 +184,7 @@ impl AppController<Message> for Calc {
                             text_color = Color::Light;
                             div
                         })  
-                        .child(|label: Text<_>| {
+                        .child(Leak, |label: Text<_>| {
                             label
                             .size(50.0f32)
                             .font_id(self.context.fira_code)

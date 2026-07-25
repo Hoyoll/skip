@@ -205,11 +205,12 @@ impl<'a> skip::Renderer for Canvas<'a> {
         }
  
     }
-    fn start_clip(&mut self, dim: &skip::DivW) {
+
+    fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>) {
         self.canvas.save();
-        let rect = skia_safe::Rect::from_xywh(dim.pos.x, dim.pos.y, dim.size.x, dim.size.y);
+        let rect = skia_safe::Rect::from_xywh(pos.x, pos.y, dim.x, dim.y);
         let mut path = skia_safe::Path::rect(&rect, None);
-        self.canvas.clip_path(&path, None, Some(true));
+        self.canvas.clip_path(&path, None, Some(true)); 
     }
     fn end_clip(&mut self) {
         self.canvas.restore();

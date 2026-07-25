@@ -5,7 +5,7 @@ use crate::{Mouse, Proc, Renderer, State, Vec2};
 pub(crate) struct ProcArg<'skip, R: Renderer, P: Proc<'skip, R>> {
     pub proc: P,
     pub arg: P::Arg,
-    pub ph: PhantomData<(&'skip ())>,
+    pub ph: PhantomData<&'skip ()>,
 }
 
 pub(crate) trait Widget<'skip, R: Renderer> {

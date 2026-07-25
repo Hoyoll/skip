@@ -372,21 +372,6 @@ impl<'skip, R: Renderer> Div<R> {
     }
 
     #[inline]
-    pub fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
-        mut self,
-        mut f: F,
-    ) -> Self {
-        self.renderer.set_parent(&self.widget.size, &self.widget.pos);
-        let w = f(W::inherit(
-            &self.widget.size,
-            &self.widget.pos,
-            self.renderer,
-        ));
-        self.renderer = w.renderer();
-        self
-    }
-
-    #[inline]
     pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
         let pos = pos.into();
         self.widget.pos.x += pos.x;
@@ -424,17 +409,6 @@ impl<'skip, R: Renderer> Div<R> {
     }
 
     #[inline]
-    pub fn clip<W: Widget<'skip, R>, F: FnMut(Self) -> Self>(
-        mut self,
-        mut f: F,
-    ) -> Self {
-        self.renderer.start_clip(&self.widget);
-        self = f(self); 
-        self.renderer.end_clip();
-        self
-    }
-
-    #[inline]
     pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(self, f: F) -> W {
         f(W::inherit(self.widget.size, self.widget.pos, self.renderer))
     }
@@ -467,15 +441,56 @@ impl<'skip, R: Renderer> Div<R> {
         }
         On::call(f, self, mouse_pos) 
     }
+ 
+    #[inline]
+    pub fn child<Child: crate::Child<R>, W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
+        mut self,
+        _: Child,
+        mut f: F,
+    ) -> Self {
+        self.renderer.set_parent(&self.widget.size, &self.widget.pos);
+        
+        let w = f(W::inherit(
+            &self.widget.size,
+            &self.widget.pos,
+            Child::start(self.renderer, &self.widget.size, &self.widget.pos),
+        ));
+        self.renderer = Child::end(w.renderer());
+        self
+    } 
 }
 
 
-pub trait Child {
+pub trait Child<R: Renderer> {
+    fn start(renderer: R, dim: &Vec2<f32>, pos: &Vec2<f32>) -> R;
+    fn end(renderer: R) -> R;
 }
 
 pub struct Clip;
 
+impl<R: Renderer> Child<R> for Clip {
+    fn start(mut renderer: R, dim: &Vec2<f32>, pos: &Vec2<f32>) -> R {
+        renderer.start_clip(dim, pos);
+        renderer
+    }
+
+    fn end(mut renderer: R) -> R {
+        renderer.end_clip();
+        renderer
+    }
+}
+
 pub struct Leak;
+
+impl<R: Renderer> Child<R> for Leak {
+    fn start(renderer: R, _dim: &Vec2<f32>, _pos: &Vec2<f32>) -> R {
+        renderer
+    }
+
+    fn end(renderer: R) -> R {
+        renderer
+    }
+}
 
 pub trait On<'skip, R: Renderer, W: Widget<'skip, R>> {
     type Out;
@@ -582,7 +597,7 @@ impl<'skip, R: Renderer> Text<'skip, R> {
     }
 
     #[inline]
-    pub fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
+    fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
         mut self,
         mut f: F,
     ) -> Self {
@@ -745,7 +760,7 @@ pub trait Renderer {
     fn render_img(&mut self, img: &DivW, color: Color, image_id: ImageId);
     fn render_circle(&mut self, circle: &CircleW, color: Color);
     fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
-    fn start_clip(&mut self, dim: &DivW);
+    fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>);
     fn mouse_pos(&mut self) -> Vec2<f32>;
     //fn mouse_state(&mut self) -> &Vec<(Mouse, State)>;
     fn end_clip(&mut self);
