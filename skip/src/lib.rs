@@ -87,9 +87,9 @@ impl<'skip, R: Renderer> Horizontal<R> {
     }
 
     #[inline]
-    pub fn add<W: Widget<'skip, R>, F: FnMut(W) -> WO, WO: Widget<'skip, R>>(
+    pub fn add<W: Widget<'skip, R>>(
         mut self,
-        mut f: F,
+        mut f: impl FnOnce(W) -> W,
     ) -> Self {
         let mut w = f(W::inherit(
             (0.0, 0.0),
@@ -110,23 +110,15 @@ impl<'skip, R: Renderer> Horizontal<R> {
     }
 
     #[inline]
-    pub fn padding<V: Into<Vec2<f32>>>(mut self, v: V) -> Self {
-        let pad = v.into();
-        self.layout.pos.x += pad.x;
-        self.layout.pos.y += pad.y;
-        self
-    }
-
-    #[inline]
-    pub fn proc<PA: Into<ProcArg<'skip,R, P>>,P: Proc<'skip, R, Widget = Self>>(
+    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
         self,
-        proc: PA,
+        proc: impl Into<ProcArg<'skip, R, P>>,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
     }
 
-    pub fn on<On: crate::On<'skip, R, Self, Out = Self>, F: FnMut(On::Arg<'_>) -> On::FnOut>(mut self, f: F) -> Self {
+    pub fn on<On: crate::On<'skip, R, Self, Out = Self>>(mut self, f: impl FnMut(On::Arg<'_>) -> On::FnOut) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.layout.pos.x)
             && (mouse_pos.y >= self.layout.pos.y)
@@ -137,16 +129,17 @@ impl<'skip, R: Renderer> Horizontal<R> {
         }
         On::call(f, self, mouse_pos) 
     }
+    
     pub fn canvas_size(&mut self) -> Vec2<f32> {
         self.renderer.canvas_size()
     }
 
 
     #[inline]
-    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> WO, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+    pub fn iter<Iter: Iterator, W: Widget<'skip, R>>(
         mut self,
-        items: I,
-        mut f: F,
+        items: impl Into<IterArg<Iter>>,
+        mut f: impl FnMut(W, Iter::Item) -> W,
     ) -> Self {
         let mut w;
         let mut iter_arg = items.into();
@@ -193,6 +186,13 @@ impl<'skip, R: Renderer> Horizontal<R> {
         }
         self
     }
+
+    #[inline]
+    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
+        Op::apply(&mut self.layout.pos,pos.into());
+        self
+    }
+
 }
 
 
@@ -217,9 +217,9 @@ impl<'skip, R: Renderer> Vertical<R> {
     }
 
     #[inline]
-    pub fn add<W: Widget<'skip, R>, F: FnMut(W) -> WO, WO: Widget<'skip, R>>(
+    pub fn add<W: Widget<'skip, R>>(
         mut self,
-        mut f: F,
+        mut f: impl FnOnce(W) -> W,
     ) -> Self {
         let mut w = f(W::inherit(
             (0.0, 0.0),
@@ -240,27 +240,24 @@ impl<'skip, R: Renderer> Vertical<R> {
     }
 
     #[inline]
-    pub fn padding<V: Into<Vec2<f32>>>(mut self, v: V) -> Self {
-        let pad = v.into();
-        self.layout.pos.x += pad.x;
-        self.layout.pos.y += pad.y;
+    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
+        Op::apply(&mut self.layout.pos,pos.into());
         self
     }
- 
     #[inline]
-    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
         self,
-        proc: PA,
+        proc: impl Into<ProcArg<'skip,R, P>>,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
     }
     
     #[inline]
-    pub fn iter<I: Into<IterArg<Iter>>,Iter: Iterator, F: FnMut(W, Iter::Item) -> WO, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+    pub fn iter<Iter: Iterator, W: Widget<'skip, R>>(
         mut self,
-        mut items: I,
-        mut f: F,
+        mut items: impl Into<IterArg<Iter>>,
+        mut f: impl FnMut(W, Iter::Item) -> W,
     ) -> Self {
         let mut w;
         let mut iter_arg = items.into();
@@ -308,7 +305,7 @@ impl<'skip, R: Renderer> Vertical<R> {
         self
     }
 
-    pub fn on<On: crate::On<'skip, R, Self, Out = Self>, F: FnMut(On::Arg<'_>) -> On::FnOut>(mut self, f: F) -> Self {
+    pub fn on<On: crate::On<'skip, R, Self, Out = Self>>(mut self, f: impl FnMut(On::Arg<'_>) -> On::FnOut) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.layout.pos.x)
             && (mouse_pos.y >= self.layout.pos.y)
@@ -339,11 +336,10 @@ impl<'skip, R: Renderer> Circle<R> {
     }
 
     #[inline]
-    pub fn pos<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
-        self.widget.pos = pos.into();
+    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
+        Op::apply(&mut self.widget.pos,pos.into());
         self
     }
-
     #[inline]
     pub fn render<C: Into<Color>>(mut self, color: C) -> Self {
         self.renderer.render_circle(&self.widget, color.into());
@@ -367,38 +363,10 @@ impl<'skip, R: Renderer> Div<R> {
     }
     
     #[inline]
-    pub fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
         self.renderer.get_parent()
     }
-
-    #[inline]
-    pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
-        let pos = pos.into();
-        self.widget.pos.x += pos.x;
-        self.widget.pos.y += pos.y;
-        self
-    }
-
-    #[inline]
-    pub fn pos<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
-        self.widget.pos = pos.into();
-        self
-    }
-
-    #[inline]
-    pub fn size<V: Into<Vec2<f32>>>(mut self, dim: V) -> Self {
-        self.widget.size = dim.into();
-        self
-    }
-
-    #[inline]
-    pub fn enlarge<V: Into<Vec2<f32>>>(mut self, dim: V) -> Self {
-        let size = dim.into();
-        self.widget.size.x += size.x;
-        self.widget.size.y += size.y;
-        self
-    }
-    
+   
     #[inline]
     pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
         self,
@@ -406,31 +374,22 @@ impl<'skip, R: Renderer> Div<R> {
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
-    }
-
-    #[inline]
-    pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(self, f: F) -> W {
-        f(W::inherit(self.widget.size, self.widget.pos, self.renderer))
-    }
-
-    #[inline]
-    pub fn get_size(&mut self) -> Vec2<f32> {
-        self.size()
-    }
+    } 
 
     #[inline]
     pub fn align<Align: crate::Align, Apply: crate::Apply>(mut self) -> Self {
-        let res = Align::calc(self.get_parent(), self.get_size());
+        let res = Align::calc(self.renderer.get_parent(), &self.widget.size);
         Apply::apply(res, &mut self.widget.pos);
         self
     }
+
     #[inline]
     pub fn render<Style: crate::Style>(mut self, style: impl Into<Style>) -> Self {
         style.into().render(&self.widget, &mut self.renderer);
         self
     }
 
-    pub fn on<On: crate::On<'skip, R, Self, Out = Self>, F: FnMut(On::Arg<'_>) -> On::FnOut>(mut self, f: F) -> Self {
+    pub fn on<On: crate::On<'skip, R, Self, Out = Self>>(mut self, f: impl FnMut(On::Arg<'_>) -> On::FnOut) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let hovered = (mouse_pos.x >= self.widget.pos.x)
             && (mouse_pos.y >= self.widget.pos.y)
@@ -443,10 +402,9 @@ impl<'skip, R: Renderer> Div<R> {
     }
  
     #[inline]
-    pub fn child<Child: crate::Child<R>, W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
+    pub fn child<W: Widget<'skip, R>, Child: crate::Child<R>>(
         mut self,
-        _: Child,
-        mut f: F,
+        f: impl FnOnce(W) -> W,
     ) -> Self {
         self.renderer.set_parent(&self.widget.size, &self.widget.pos);
         
@@ -458,8 +416,58 @@ impl<'skip, R: Renderer> Div<R> {
         self.renderer = Child::end(w.renderer());
         self
     } 
+
+    #[inline]
+    pub fn size<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
+        Op::apply(&mut self.widget.size,pos.into());
+        self
+    }
+
+    #[inline]
+    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
+        Op::apply(&mut self.widget.pos,pos.into());
+        self
+    }
 }
 
+pub trait Operation {
+    type Item;
+
+    fn apply(initial_item: &mut Self::Item, diff: Self::Item);
+}
+
+pub struct Inc;
+
+impl Operation for Inc {
+    type Item = Vec2<f32>;
+
+    fn apply(initial_item: &mut Self::Item, diff: Self::Item) {
+        initial_item.x += diff.x;
+        initial_item.y += diff.y;
+    }
+}
+
+pub struct Set;
+
+impl Operation for Set {
+    type Item = Vec2<f32>;
+
+    fn apply(initial_item: &mut Self::Item, diff: Self::Item) {
+        initial_item.x = diff.x;
+        initial_item.y = diff.y;
+    }
+}
+
+pub struct Dec;
+
+impl Operation for Dec {
+    type Item = Vec2<f32>;
+
+    fn apply(initial_item: &mut Self::Item, diff: Self::Item) {
+        initial_item.x -= diff.x;
+        initial_item.y -= diff.y;
+    }
+}
 
 pub trait Child<R: Renderer> {
     fn start(renderer: R, dim: &Vec2<f32>, pos: &Vec2<f32>) -> R;
@@ -592,36 +600,10 @@ impl<Color: Into<crate::Color>> From<(ImageId, Color)> for Image<Color> {
 
 impl<'skip, R: Renderer> Text<'skip, R> {
     #[inline]
-    pub fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
         self.renderer.get_parent()
     }
 
-    #[inline]
-    fn child<W: Widget<'skip, R>, F: FnOnce(W) -> WO, WO: Widget<'skip, R>>(
-        mut self,
-        mut f: F,
-    ) -> Self {
-        let size = self.get_size();
-        self.renderer.set_parent(&size, &self.widget.pos);
-        let w = f(W::inherit(
-            &size,
-            &self.widget.pos,
-            self.renderer,
-        ));
-        self.renderer = w.renderer();
-        self
-    }
-
-
-    pub fn center(mut self) -> Self {
-        let (p_size, p_pos) = self.renderer.get_parent();
-        let size = self.get_size();
-        let center_pos: Vec2<_> = (p_pos.x + p_size.x / 2.0, p_pos.y + p_size.y / 2.0).into();
-        self.widget.pos.x = center_pos.x - size.x / 2.0;
-        self.widget.pos.y = center_pos.y - size.y / 2.0;
-        self
-    }
- 
     #[inline]
     pub fn cursor(mut self, cursor: Cursor) -> Self {
         self.renderer.change_cursor(cursor);
@@ -629,30 +611,15 @@ impl<'skip, R: Renderer> Text<'skip, R> {
     }
 
     #[inline]
-    pub fn pos<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
-        self.widget.pos = pos.into();
+    pub fn size(mut self, size: f32) -> Self {
+        self.widget.size = size;
         self
     }
 
-    #[inline]
-    pub fn size<S: Into<f32>>(mut self, size: S) -> Self {
-        let s = size.into();
-        self.widget.size = s;
-        //self.widget.pos.y += s;
-        self
-    }
-
-    pub fn get_size(&mut self) -> Vec2<f32> {
+    fn get_size(&mut self) -> Vec2<f32> {
         self.size()
     }
 
-    #[inline]
-    pub fn padding<V: Into<Vec2<f32>>>(mut self, pos: V) -> Self {
-        let pos = pos.into();
-        self.widget.pos.x += pos.x;
-        self.widget.pos.y += pos.y;
-        self
-    }
     #[inline]
     pub fn text(mut self, text: &'skip str) -> Self {
         self.widget.text = text;
@@ -671,22 +638,23 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         self
     }
     #[inline]
-    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
         self,
-        proc: PA,
+        proc: impl Into<ProcArg<'skip, R, P>>,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
     }
 
-    #[inline]
-    pub fn transform<F: FnOnce(W) -> W, W: Widget<'skip, R>>(mut self, f: F) -> W {
-        f(W::inherit(self.renderer.text_size(&self.widget), self.widget.pos, self.renderer))
-    }
-
     pub fn align<Align: crate::Align, Apply: crate::Apply>(mut self) -> Self {
         let res = Align::calc(self.get_parent(), self.get_size());
         Apply::apply(res, &mut self.widget.pos);
+        self
+    }
+
+    #[inline]
+    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
+        Op::apply(&mut self.widget.pos,pos.into());
         self
     }
 }
@@ -920,24 +888,6 @@ pub enum Key {
     Symbol(&'static str),
     Unknown
 }
-
-struct DivS<Color: Into<crate::Color>> {
-    pub color: Color,
-    pub rad: f32,
-}
-
-impl<C: Into<crate::Color>> From<C> for DivS<C> {
-    fn from(value: C) -> Self {
-        Self { color: value, rad: 0.0 }
-    }
-}
-
-impl<C: Into<crate::Color>> From<(C, f32)> for DivS<C> {
-    fn from(value: (C, f32)) -> Self {
-        Self { color: value.0, rad: value.1 }
-    }
-}
-
 
 
 #[derive(Debug)]

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use skip::{Center, Circle, Div, End, Font, Horizontal, Hover, Keys, Leak, Mouse, Plain, Proc, State, Text, Vec2, Vertical, X, XY, Y};
+use skip::{Center, Circle, Div, End, Font, Horizontal, Hover, Inc, Keys, Leak, Mouse, Plain, Proc, Set, State, Text, Vec2, Vertical, X, XY, Y};
 use skip_skia::{AppController, Canvas, Event};
 
 enum Color {
@@ -38,7 +38,11 @@ enum Message {}
 struct Calc {
     context: Context,
 }
-
+struct Context {
+    title: String,
+    fira_code: Font,
+    text_input: TextInput,
+}
 const FIRA_CODE: &[u8] = include_bytes!("../assets/fonts/fira_code.ttf");
 
 enum Button {
@@ -97,7 +101,7 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
    fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget {
        widget
         .render::<Plain<_>>(Color::UiBg) 
-        .child(Leak,|text: Text<_>| {
+        .child::<Text<_>, Leak>(|text| {
             text
             .size(80.0f32)
             .font_id(argv)
@@ -111,26 +115,8 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut TextInput {
 }
 
 const BORDER: skip::cn::Border<Color, (f32, f32), (f32, f32)> = skip::cn::Border(Color::Fg, (1.0, 1.0), (0.0, 0.0));
-struct Context {
-    title: String,
-    fira_code: Font,
-    text_input: TextInput,
-}
 
 impl AppController<Message> for Calc {
-   fn bootstrap(&mut self, mut context: skip_skia::Context) {
-       let attr = winit::window::WindowAttributes::default().with_title(self.context.title.clone());
-       let id = context.new_window(attr);
-       context.request_redraw(&id);
-       context.set_visible(&id, true);
-
-       self.context.fira_code = context.new_font(FIRA_CODE, None).unwrap();
-   }
-
-   fn on_user_event<'skip>(&mut self, user_event: Message, context: skip_skia::Context<'skip>) {
-       
-   }
-
    fn on_draw(
        &mut self,
        on_window: winit::window::WindowId,
@@ -144,24 +130,24 @@ impl AppController<Message> for Calc {
         ui
         .add(|background: Div<_>| {
             background
-            .size(&win)
+            .size::<Set>(&win)
             .render::<Plain<_>>(Color::Background)
-            .on::<Hover,_>(|(pos, background)| {
+            .on::<Hover>(|(pos, background)| {
                 background
-                .child(Leak, |circle: Circle<_>| {
+                .child::<Circle<_>,Leak>( |circle| {
                     circle
-                    .pos(&pos)
+                    .position::<Set>(&pos)
                     .radius(height / 2.0)
                     .render(Color::Light)
                 })
             })
-            .child(Leak, |layout: Vertical<_>| {
+            .child::<Vertical<_>, Leak>( |layout| {
                 layout
-                .padding((gap / 2.0, 1.0))
+                .position::<Inc>((gap / 2.0, 1.0))
                 .gap(gap)
                 .add(|text_box: Div<_>| {
                     text_box
-                    .size((win.x - gap, height))
+                    .size::<Set>((win.x - gap, height))
                     .proc(BORDER)
                     .proc((&mut self.context.text_input, self.context.fira_code))
                 })
@@ -171,30 +157,25 @@ impl AppController<Message> for Calc {
                     .iter((BUTTONS.iter(), 4), |button: Div<_>, btn| {
                         let mut text_color = Color::Fg;
                         button
-                        .size((width, height))
+                        .size::<Set>((width, height))
                         .proc(BORDER)
                         .render::<Plain<_>>(Color::UiBg)
-                        .on::<Keys,_>(|on| {
+                        .on::<Keys>(|on| {
                            match on {
                                (Mouse::Left, State::Pressed) => self.context.text_input.accept(btn),
                                 _ => ()
                            } 
                         })
-                        .on::<Hover,_>(|(_, div)| {
+                        .on::<Hover>(|(_, div)| {
                             text_color = Color::Light;
                             div
                         })  
-                        .child(Leak, |label: Text<_>| {
+                        .child::<Text<_>, Leak>( |label| {
                             label
                             .size(50.0f32)
                             .font_id(self.context.fira_code)
                             .text(btn.get_text())
                             .align::<Center, XY>()
-                            //.child(|div: Div<_>| {
-                            //    div
-                            //    .proc(BORDER)
-                            //    .render::<Plain<_>>(Color::UiBg) 
-                            //})
                             .render(&text_color)
                        })
                     })
@@ -203,6 +184,20 @@ impl AppController<Message> for Calc {
         });
         Some(Duration::from_millis(16))
  
+   }
+
+   
+   fn bootstrap(&mut self, mut context: skip_skia::Context) {
+       let attr = winit::window::WindowAttributes::default().with_title(self.context.title.clone());
+       let id = context.new_window(attr);
+       context.request_redraw(&id);
+       context.set_visible(&id, true);
+
+       self.context.fira_code = context.new_font(FIRA_CODE, None).unwrap();
+   }
+
+   fn on_user_event<'skip>(&mut self, user_event: Message, context: skip_skia::Context<'skip>) {
+       
    }
 
    fn on_key(&mut self, _on_window: winit::window::WindowId, _key: (skip::Key, skip::State)) {
