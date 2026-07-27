@@ -13,6 +13,9 @@ impl<'skip,R: crate::Renderer, Color: Into<crate::Color>, Thickness: Into<Vec2<f
         widget
             .child::<Div<_>, Leak>(|div| {
                 div
+                .expr((&true, |div, s| {
+                    div
+                }))
                 .size::<Inc>((large.x * 2.0, large.y * 2.0))
                 .position::<Inc>(pad)
                 .render::<Plain<_>>(self.0)

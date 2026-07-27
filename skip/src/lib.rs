@@ -193,6 +193,10 @@ impl<'skip, R: Renderer> Horizontal<R> {
         self
     }
 
+    #[inline]
+    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
+        f(self, expr_pack)
+    }
 }
 
 
@@ -320,9 +324,20 @@ impl<'skip, R: Renderer> Vertical<R> {
     pub fn canvas_size(&mut self) -> Vec2<f32> {
         self.renderer.canvas_size()
     }
+
+    #[inline]
+    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
+        f(self, expr_pack)
+    }
 }
 
 impl<'skip, R: Renderer> Circle<R> {
+    
+    #[inline]
+    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
+        f(self, expr_pack)
+    }
+
     #[inline]
     pub fn cursor(mut self, cursor: Cursor) -> Self {
         self.renderer.change_cursor(cursor);
@@ -330,8 +345,8 @@ impl<'skip, R: Renderer> Circle<R> {
     }
 
     #[inline]
-    pub fn radius<V: Into<f32>>(mut self, rad: V) -> Self {
-        self.widget.radius = rad.into();
+    pub fn radius(mut self, rad: f32) -> Self {
+        self.widget.radius = rad;
         self
     }
 
@@ -341,7 +356,7 @@ impl<'skip, R: Renderer> Circle<R> {
         self
     }
     #[inline]
-    pub fn render<C: Into<Color>>(mut self, color: C) -> Self {
+    pub fn render(mut self, color: impl Into<Color>) -> Self {
         self.renderer.render_circle(&self.widget, color.into());
         self
     }
@@ -361,16 +376,11 @@ impl<'skip, R: Renderer> Div<R> {
         self.renderer.change_cursor(cursor);
         self
     }
-    
+      
     #[inline]
-    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
-        self.renderer.get_parent()
-    }
-   
-    #[inline]
-    pub fn proc<PA: Into<ProcArg<'skip, R, P>>,P: Proc<'skip, R, Widget = Self>>(
+    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
         self,
-        proc: PA,
+        proc: impl Into<ProcArg<'skip, R, P>>,
     ) -> Self {
         let mut pa = proc.into();
         pa.proc.consume(self, pa.arg)
@@ -420,6 +430,77 @@ impl<'skip, R: Renderer> Div<R> {
     #[inline]
     pub fn size<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
         Op::apply(&mut self.widget.size,pos.into());
+        self
+    }
+
+    #[inline]
+    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
+        Op::apply(&mut self.widget.pos,pos.into());
+        self
+    }
+
+    #[inline]
+    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
+        f(self, expr_pack)
+    }
+}
+
+impl<'skip, R: Renderer> Text<'skip, R> {
+    #[inline]
+    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
+        f(self, expr_pack)
+    }
+
+    #[inline]
+    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+        self.renderer.get_parent()
+    }
+
+    #[inline]
+    pub fn cursor(mut self, cursor: Cursor) -> Self {
+        self.renderer.change_cursor(cursor);
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, size: f32) -> Self {
+        self.widget.size = size;
+        self
+    }
+
+    fn get_size(&mut self) -> Vec2<f32> {
+        self.size()
+    }
+
+    #[inline]
+    pub fn text(mut self, text: &'skip str) -> Self {
+        self.widget.text = text;
+        self
+    }
+
+    #[inline]
+    pub fn font_id(mut self, font_id: usize) -> Self {
+        self.widget.font_id = font_id;
+        self
+    }
+
+    #[inline]
+    pub fn render<C: Into<Color>>(mut self, color: C) -> Self {
+        self.renderer.render_text(&self.widget, color.into());
+        self
+    }
+    #[inline]
+    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
+        self,
+        proc: impl Into<ProcArg<'skip, R, P>>,
+    ) -> Self {
+        let mut pa = proc.into();
+        pa.proc.consume(self, pa.arg)
+    }
+
+    pub fn align<Align: crate::Align, Apply: crate::Apply>(mut self) -> Self {
+        let res = Align::calc(self.get_parent(), self.get_size());
+        Apply::apply(res, &mut self.widget.pos);
         self
     }
 
@@ -595,67 +676,6 @@ impl From<ImageId> for Image<()> {
 impl<Color: Into<crate::Color>> From<(ImageId, Color)> for Image<Color> {
     fn from(value: (ImageId, Color)) -> Self {
         Self { img_id: value.0, tint: value.1 }
-    }
-}
-
-impl<'skip, R: Renderer> Text<'skip, R> {
-    #[inline]
-    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
-        self.renderer.get_parent()
-    }
-
-    #[inline]
-    pub fn cursor(mut self, cursor: Cursor) -> Self {
-        self.renderer.change_cursor(cursor);
-        self
-    }
-
-    #[inline]
-    pub fn size(mut self, size: f32) -> Self {
-        self.widget.size = size;
-        self
-    }
-
-    fn get_size(&mut self) -> Vec2<f32> {
-        self.size()
-    }
-
-    #[inline]
-    pub fn text(mut self, text: &'skip str) -> Self {
-        self.widget.text = text;
-        self
-    }
-
-    #[inline]
-    pub fn font_id(mut self, font_id: usize) -> Self {
-        self.widget.font_id = font_id;
-        self
-    }
-
-    #[inline]
-    pub fn render<C: Into<Color>>(mut self, color: C) -> Self {
-        self.renderer.render_text(&self.widget, color.into());
-        self
-    }
-    #[inline]
-    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
-        self,
-        proc: impl Into<ProcArg<'skip, R, P>>,
-    ) -> Self {
-        let mut pa = proc.into();
-        pa.proc.consume(self, pa.arg)
-    }
-
-    pub fn align<Align: crate::Align, Apply: crate::Apply>(mut self) -> Self {
-        let res = Align::calc(self.get_parent(), self.get_size());
-        Apply::apply(res, &mut self.widget.pos);
-        self
-    }
-
-    #[inline]
-    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
-        Op::apply(&mut self.widget.pos,pos.into());
-        self
     }
 }
 

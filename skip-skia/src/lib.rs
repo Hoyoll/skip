@@ -43,7 +43,7 @@ impl<T: 'static> Event<T> {
 
 pub trait AppController<T> {
     fn bootstrap<'skip>(&mut self, context: Context<'skip>);
-    fn on_user_event<'skip>(&mut self, user_event: T, context: Context<'skip>);
+    fn on_user_event<'skip>(&mut self, user_event: T, context: Context<'skip>) {}
     //fn share_resource(&mut self) -> &mut Shared;
     fn on_draw(
         &mut self,
