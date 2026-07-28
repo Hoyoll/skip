@@ -12,6 +12,7 @@ use glutin::{
 };
 use raw_window_handle::HasWindowHandle;
 use skip::{Mouse, State, Vec2};
+use winit::event_loop::EventLoopProxy;
 pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
     let event_loop: winit::event_loop::EventLoop<Event> =
         winit::event_loop::EventLoop::with_user_event()
@@ -24,7 +25,7 @@ pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
         current_focus: winit::window::WindowId::dummy(),
         app,
         windows: HashMap::new(),
-        proxy: Event(event_loop.create_proxy()),
+        proxy: event_loop.create_proxy(),
         paint: skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.0), None),
         fonts: Vec::new(),
         images: Vec::new(),
@@ -33,6 +34,7 @@ pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
 
     event_loop.run_app(&mut wn);
 }
+#[derive(Clone)]
 pub struct Event<T: 'static>(winit::event_loop::EventLoopProxy<T>);
 
 impl<T: 'static> Event<T> {
@@ -42,7 +44,7 @@ impl<T: 'static> Event<T> {
 }
 
 pub trait AppController<T> {
-    fn bootstrap<'skip>(&mut self, context: Context<'skip>);
+    fn bootstrap<'skip>(&mut self, context: Context<'skip>, event: EventLoopProxy<T>);
     fn on_user_event<'skip>(&mut self, user_event: T, context: Context<'skip>) {}
     //fn share_resource(&mut self) -> &mut Shared;
     fn on_draw(
@@ -237,7 +239,7 @@ struct WinitRenderer<T: 'static, A: AppController<T>> {
     //key: Vec<skip::Key>,
     mouse_pos: skip::Vec2<f32>,
     current_focus: winit::window::WindowId,
-    proxy: Event<T>,
+    proxy: EventLoopProxy<T>,
     app: A,
     paint: skia_safe::Paint,
     fonts: Vec<skia_safe::Font>,
@@ -411,6 +413,7 @@ impl<'skip> Context<'skip> {
         None
     }
 
+    /// Just, end the app
     pub fn exit(&mut self) {
         self.event_loop.exit();
     }
@@ -426,7 +429,7 @@ impl<T: 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
             fonts: &mut self.fonts,
             font_mgr: &mut self.font_mgr,
             images: &mut self.images,
-        });
+        }, self.proxy.clone());
     }
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: T) {

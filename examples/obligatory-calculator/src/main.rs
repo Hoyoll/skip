@@ -1,7 +1,8 @@
 use std::time::Duration;
 
-use skip::{Center, Circle, Div, End, Font, Horizontal, Hover, Inc, Keys, Leak, Mouse, Plain, Proc, Set, State, Text, Vec2, Vertical, X, XY, Y};
+use skip::{Center, Circle, Div, End, Font, Horizontal, Hover, Inc, Leak, Mouse, Mouses, Plain, Proc, Set, State, Text, Vec2, Vertical, X, XY, Y};
 use skip_skia::{AppController, Canvas, Event};
+use winit::event_loop::EventLoopProxy;
 
 enum Color {
     Background,
@@ -160,7 +161,7 @@ impl AppController<Message> for Calc {
                         .size::<Set>((width, height))
                         .proc(BORDER)
                         .render::<Plain<_>>(Color::UiBg)
-                        .on::<Keys>(|on| {
+                        .on::<Mouses>(|on| {
                            match on {
                                (Mouse::Left, State::Pressed) => self.context.text_input.accept(btn),
                                 _ => ()
@@ -187,7 +188,7 @@ impl AppController<Message> for Calc {
    }
 
    
-   fn bootstrap(&mut self, mut context: skip_skia::Context) {
+   fn bootstrap(&mut self, mut context: skip_skia::Context, proxy: EventLoopProxy<Message>) {
        let attr = winit::window::WindowAttributes::default().with_title(self.context.title.clone());
        let id = context.new_window(attr);
        context.request_redraw(&id);

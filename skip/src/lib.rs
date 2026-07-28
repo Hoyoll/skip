@@ -509,6 +509,21 @@ impl<'skip, R: Renderer> Text<'skip, R> {
         Op::apply(&mut self.widget.pos,pos.into());
         self
     }
+
+    pub fn on<On: crate::On<'skip, R, Self, Out = Self>>(mut self, f: impl FnMut(On::Arg<'_>) -> On::FnOut) -> Self {
+        let mouse_pos = self.renderer.mouse_pos();
+        let size = self.get_size();
+        let hovered = (mouse_pos.x >= self.widget.pos.x)
+            && (mouse_pos.y >= self.widget.pos.y)
+            && (mouse_pos.x <= (self.widget.pos.x + size.x))
+            && (mouse_pos.y <= (self.widget.pos.y + size.y));
+        if !hovered {
+            return self;
+        }
+        On::call(f, self, mouse_pos) 
+    }
+ 
+
 }
 
 pub trait Operation {
@@ -611,9 +626,9 @@ impl<'skip, R: Renderer, W: Widget<'skip, R>> On<'skip, R, W> for Hover {
     } 
 }
 
-pub struct Keys;
+pub struct Mouses;
 
-impl<'skip, R: Renderer, W: Widget<'skip, R>> On<'skip, R, W> for Keys {
+impl<'skip, R: Renderer, W: Widget<'skip, R>> On<'skip, R, W> for Mouses {
     type Out = W;
     //type Arg = &(Mouse, State);
     type FnOut = ();
