@@ -94,6 +94,16 @@ impl<'a> skip::Renderer for Canvas<'a> {
             f(key)
         }
     }
+
+    fn render_paragraph<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
+        let mut style = skia_safe::textlayout::TextStyle::new();
+        style.set_font_size(text.size);
+        let mut paragraph_style = skia_safe::textlayout::ParagraphStyle::new();
+        paragraph_style.set_text_align(skia_safe::textlayout::TextAlign::Left);
+        let font_coll = skia_safe::textlayout::FontCollection::new();
+        let builder = skia_safe::textlayout::ParagraphBuilder::new(&paragraph_style, font_coll);
+    }
+
     fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(&mut self, dim: Dim, pos: Pos) {
         self.p_pos = pos.into();
         self.p_dim = dim.into();
@@ -104,7 +114,8 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
 
     fn canvas_size(&mut self) -> skip::Vec2<f32> {
-        (&self.window_dim).into()
+        let size = self.window.inner_size();
+        (size.width as f32, size.height as f32).into()
     }
     fn render_div(&mut self, div: &skip::DivW, color: skip::Color, radius: f32) {
         let right = div.pos.x + div.size.x;

@@ -25,9 +25,32 @@ pub struct CircleW {
 
 pub type ImageId = usize;
 
-pub struct Text<'skip, R: Renderer> {
+pub struct Text<'skip, TD: TextD<R>, R: Renderer > {
     widget: TextW<'skip>,
+    text_d: TD,
     renderer: R,
+}
+
+trait TextD<R: Renderer>: Default {
+    fn display(renderer: &mut R, text: &TextW, color: Color);
+}
+
+#[derive(Default,Debug)]
+pub struct Wrap;
+
+impl<R: Renderer> TextD<R> for Wrap {
+    fn display(renderer: &mut R, text: &TextW, color: Color) {
+        renderer.render_paragraph(text, color);
+    }
+}
+
+#[derive(Default,Debug)]
+pub struct Linear;
+
+impl<R: Renderer> TextD<R> for Linear {
+    fn display(renderer: &mut R, text: &TextW, color: Color) {
+        renderer.render_text(text, color);
+    }
 }
 
 pub struct TextW<'skip> {
@@ -84,6 +107,12 @@ impl<'skip, R: Renderer> Horizontal<R> {
             },
             renderer,
         }
+    }
+
+    pub fn offset<Operation: crate::Operation<Item = Vec2<f32>>>(mut self, offset: impl Into<Operation::Item>) -> Self {
+        let offset = offset.into();
+        Operation::apply(&mut self.layout.offset, offset.into());
+        self
     }
 
     #[inline]
@@ -445,7 +474,7 @@ impl<'skip, R: Renderer> Div<R> {
     }
 }
 
-impl<'skip, R: Renderer> Text<'skip, R> {
+impl<'skip, R: Renderer, TD: TextD<R>> Text<'skip, TD, R> {
     #[inline]
     pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
         f(self, expr_pack)
@@ -762,6 +791,7 @@ pub trait Renderer {
     fn render_div(&mut self, div: &DivW, color: Color, radius: f32);
     fn render_img(&mut self, img: &DivW, color: Color, image_id: ImageId);
     fn render_circle(&mut self, circle: &CircleW, color: Color);
+    fn render_paragraph<'skip>(&mut self, text: &TextW<'skip>, color: Color);
     fn text_size<'skip>(&mut self, text: &TextW<'skip>) -> Vec2<f32>;
     fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>);
     fn mouse_pos(&mut self) -> Vec2<f32>;
@@ -882,7 +912,7 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Div<R> {
     } 
 }
 
-impl<'skip, R: Renderer> Widget<'skip, R> for Text<'skip, R> {
+impl<'skip, R: Renderer, TD: TextD<R>> Widget<'skip, R> for Text<'skip, TD, R> {
     #[inline]
     fn renderer(self) -> R {
         self.renderer
@@ -891,7 +921,7 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Text<'skip, R> {
     fn inherit<P: Into<Vec2<f32>>, PO: Into<Vec2<f32>>>(_dim: P, pos: PO, renderer: R) -> Self {
         let mut widget: TextW<'_> = ().into();
         widget.pos = pos.into();
-        Self { widget, renderer }
+        Self { widget, renderer, text_d: TD::default() }
     }
     
     #[inline]

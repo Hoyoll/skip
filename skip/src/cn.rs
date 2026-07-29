@@ -1,4 +1,4 @@
-use crate::{Color, Dec, Div, Font, Horizontal, Inc, Leak, Plain, Proc, Renderer, Set, Text, Vec2};
+use crate::{Color, Dec, Div, Font, Horizontal, Inc, Leak, Plain, Proc, Renderer, Set, Text, Vec2, Wrap};
 
 pub struct Border<Color: Into<crate::Color>, Thickness: Into<Vec2<f32>>, Offset: Into<Vec2<f32>>>(pub Color, pub Thickness, pub Offset);
 
@@ -51,7 +51,7 @@ impl<'skip, R: Renderer> Proc<'skip, R> for &'skip mut TextBox {
     type Arg = (Font, f32, Color);
     fn consume(self, widget: Self::Widget, (font, size, color): Self::Arg) -> Self::Widget {
         widget
-        .add(|text: Text<_>| {
+        .add(|text: Text<Wrap,_>| {
             text
             .font_id(font)
             .size(size)
@@ -64,7 +64,7 @@ impl<'skip, R: Renderer> Proc<'skip, R> for &'skip mut TextBox {
             //.color(&color)
             //.render(&color)
         })
-        .add(|text: Text<_>| {
+        .add(|text: Text<Wrap, _>| {
             text
             .font_id(font)
             .size(size)
