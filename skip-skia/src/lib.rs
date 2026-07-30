@@ -98,10 +98,17 @@ impl<'a> skip::Renderer for Canvas<'a> {
     fn render_paragraph<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
         let mut style = skia_safe::textlayout::TextStyle::new();
         style.set_font_size(text.size);
+        //style.set_font_families(families)
         let mut paragraph_style = skia_safe::textlayout::ParagraphStyle::new();
         paragraph_style.set_text_align(skia_safe::textlayout::TextAlign::Left);
         let font_coll = skia_safe::textlayout::FontCollection::new();
-        let builder = skia_safe::textlayout::ParagraphBuilder::new(&paragraph_style, font_coll);
+        let mut builder = skia_safe::textlayout::ParagraphBuilder::new(&paragraph_style, font_coll);
+        builder.add_text(text.text);
+        let mut paragraph = builder.build();
+        //paragraph.paint(canvas, p); 
+        paragraph.layout(self.p_dim.x);
+
+
     }
 
     fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(&mut self, dim: Dim, pos: Pos) {
@@ -117,6 +124,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
         let size = self.window.inner_size();
         (size.width as f32, size.height as f32).into()
     }
+
     fn render_div(&mut self, div: &skip::DivW, color: skip::Color, radius: f32) {
         let right = div.pos.x + div.size.x;
         let bottom = div.pos.y + div.size.y;
@@ -183,7 +191,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
         }
         self.paint
             .set_argb(color.a, color.r, color.g, color.b);
-        let font = &self.fonts[text.font_id];
+        let font = &self.fonts[text.font_id]; 
         let metrics = font.metrics();
         const MOD: f32 = 4.0;
         let baseline_y = text.pos.y - metrics.1.ascent - text.size / MOD;
