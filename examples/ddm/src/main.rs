@@ -5,7 +5,7 @@ use std::{
 
 use reqwest::blocking::Client;
 use serde_json::Value;
-use skip::{Clip, Div, Font, Leak, Mouse, Mouses, Plain, Proc, Set, State, Text, Vertical};
+use skip::{Clip, Div, Font, Leak, Mouse, Mouses, Plain, Proc, Set, State, Text, Vertical, Wrap};
 use skip_skia::{AppController, Canvas, Event, run_app};
 use winit::{
     event_loop::EventLoopProxy,
@@ -185,7 +185,7 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut EntryList {
             None => vertical, //idk, currently just zonk XD
             Some(list) => vertical
                 .gap(5.0)
-                .iter(list.iter().enumerate(), |text: Text<_>, (idx, entry)| {
+                .iter(list.iter().enumerate(), |text: Text<Wrap,_>, (idx, entry)| {
                 text
                 .font_id(font)
                 .size(40.0)

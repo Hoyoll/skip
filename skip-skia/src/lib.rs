@@ -83,32 +83,61 @@ pub struct Canvas<'skip> {
     fonts: &'skip mut Vec<skia_safe::Font>,
     images: &'skip Vec<skia_safe::Image>,
     window: &'skip mut winit::window::Window,
+    //text_cache: &'skip mut Vec<TextCache<'skip>>,
+    //cache_index: usize,
+    text_style: &'skip mut skia_safe::textlayout::TextStyle,
+    font_collection: &'skip skia_safe::textlayout::FontCollection,
+    paragrah_style: &'skip mut skia_safe::textlayout::ParagraphStyle, 
     window_dim: skip::Vec2<f32>,
     p_pos: Vec2<f32>,
     p_dim: Vec2<f32>,
 }
 
+struct TextCache<'skip> {
+    font: &'skip str,
+    text: &'skip str,
+    size: f32,
+    paragraph: skia_safe::textlayout::Paragraph,
+}
+
 impl<'a> skip::Renderer for Canvas<'a> {
+    type Paragraph = skia_safe::textlayout::Paragraph;
     fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, mut f: F) {
         for key in self.on {
             f(key)
         }
     }
 
-    fn render_paragraph<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
-        let mut style = skia_safe::textlayout::TextStyle::new();
-        style.set_font_size(text.size);
-        //style.set_font_families(families)
-        let mut paragraph_style = skia_safe::textlayout::ParagraphStyle::new();
-        paragraph_style.set_text_align(skia_safe::textlayout::TextAlign::Left);
-        let font_coll = skia_safe::textlayout::FontCollection::new();
-        let mut builder = skia_safe::textlayout::ParagraphBuilder::new(&paragraph_style, font_coll);
+    fn render_text<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, color: skip::Color) {
+        
+    }
+
+    fn text_size<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str) -> Vec2<f32> {
+        ().into()
+    }
+
+    fn render_paragraph<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, paragraph: &Option<Self::Paragraph>, color: skip::Color) {
+        
+    }
+
+    fn paragraph_size<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, paragraph: &mut Option<Self::Paragraph>) -> Vec2<f32> {
+        ().into() 
+    }
+
+    fn _paragraph_size<'skip>(&mut self, text: &mut skip::TextW<'skip>) -> Vec2<f32> {
+        self.text_style.set_font_size(text.size);
+        self.text_style.set_font_families(&[text.font]);
+        self.paragrah_style.set_text_style(self.text_style);
+        let mut builder = skia_safe::textlayout::ParagraphBuilder::new(self.paragrah_style, self.font_collection.clone());
         builder.add_text(text.text);
-        let mut paragraph = builder.build();
-        //paragraph.paint(canvas, p); 
-        paragraph.layout(self.p_dim.x);
+        let paragraph = builder.build();
 
-
+        let size = Vec2::new(paragraph.max_width() as f32, paragraph.longest_line() as f32);
+        size
+    }
+    fn _render_paragraph<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
+        self.text_cache[self.cache_index].paragraph.paint(self.canvas, (text.pos.x, text.pos.y));
+        self.cache_index += 1;
     }
 
     fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(&mut self, dim: Dim, pos: Pos) {
@@ -162,7 +191,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
     
     #[inline]
-    fn text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
+    fn _text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
         if text.text == "" {
             ().into()
         }
@@ -175,7 +204,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
         (width, height).into()
     }
 
-    fn render_text<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
+    fn _render_text<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
         if text.text == "" {
             return;
         }
