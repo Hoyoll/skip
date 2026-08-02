@@ -93,15 +93,24 @@ pub struct Canvas<'skip> {
     p_dim: Vec2<f32>,
 }
 
-struct TextCache<'skip> {
-    font: &'skip str,
-    text: &'skip str,
+struct TextCache {
+    font: u32, /// Typeface::unique_id
+    //text: &'skip str,
+    width: f32,
     size: f32,
     paragraph: skia_safe::textlayout::Paragraph,
 }
 
+pub struct Font {
+    font: skia_safe::Font,
+    tf: skia_safe::Typeface,
+}
+
 impl<'a> skip::Renderer for Canvas<'a> {
-    type Paragraph = skia_safe::textlayout::Paragraph;
+    type Paragraph = TextCache;
+    type Image = skia_safe::Image;
+    type Font = Font;
+
     fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, mut f: F) {
         for key in self.on {
             f(key)
@@ -117,7 +126,9 @@ impl<'a> skip::Renderer for Canvas<'a> {
     }
 
     fn render_paragraph<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, paragraph: &Option<Self::Paragraph>, color: skip::Color) {
-        
+        if let Some(paragraph) = paragraph {
+            paragraph.paragraph.paint(self.canvas, (text_w.pos.x, text_w.pos.y)); 
+        }
     }
 
     fn paragraph_size<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, paragraph: &mut Option<Self::Paragraph>) -> Vec2<f32> {
@@ -128,8 +139,13 @@ impl<'a> skip::Renderer for Canvas<'a> {
         self.text_style.set_font_size(text.size);
         self.text_style.set_font_families(&[text.font]);
         self.paragrah_style.set_text_style(self.text_style);
+        let prov = skia_safe::textlayout::TypefaceFontProvider::new();
+        prov.register_typeface(typeface, alias);
+    
+        //prov.register_typeface(typeface, alias)
         let mut builder = skia_safe::textlayout::ParagraphBuilder::new(self.paragrah_style, self.font_collection.clone());
         builder.add_text(text.text);
+        //self.font_collection.set_asset_font_manager(font_manager);
         let paragraph = builder.build();
 
         let size = Vec2::new(paragraph.max_width() as f32, paragraph.longest_line() as f32);
@@ -195,8 +211,11 @@ impl<'a> skip::Renderer for Canvas<'a> {
         if text.text == "" {
             ().into()
         }
-        let fonts = &mut self.fonts[text.font_id];
+        let fonts = &mut self.fonts[0];
         fonts.set_size(text.size);
+        let tf= fonts.typeface();
+        let did = tf.unique_id();
+        //fonts.typeface().family_name();
         //let metric = fonts.metrics();
         let (_, rect) = fonts.measure_str(text.text, None);
         let height = rect.height().ceil() + text.size / 10.0;

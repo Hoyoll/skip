@@ -26,23 +26,25 @@ pub struct CircleW {
 pub type ImageId = usize;
 
 pub struct Text<'skip, TD: TextD<R>, R: Renderer> {
-    widget: TextW<'skip>,
+    //widget: TextW<Option<&'skip mut TD::>>,
+    pos: Vec2<f32>,
     text: Option<&'skip mut TD::Text>,
+    font: Option<&'skip mut R::Font>,
     text_d: TD,
     renderer: R,
 }
 
-pub struct TextW<'skip> {
+pub struct TextW<Font> {
     //pub text: Option<&'skip mut Text>,
-    pub font: Option<&'skip str>, 
-    pub size: f32,
+    pub font: Font, 
+    //pub size: f32,
     pub pos: Vec2<f32>,
 }
 
 trait TextD<R: Renderer + ?Sized>: Default {
     type Text: ?Sized;
-    fn display(renderer: &mut R, text_w: &TextW, text: &Self::Text, color: Color);
-    fn measure(renderer: &mut R, text_w: &mut TextW, text: &mut Self::Text) -> Vec2<f32>;
+    fn display(renderer: &mut R,  text: &Self::Text, color: Color);
+    fn measure(renderer: &mut R,  text: &mut Self::Text) -> Vec2<f32>;
 }
 
 #[derive(Default,Debug)]
@@ -54,13 +56,11 @@ pub struct Paragraph<R: Renderer + ?Sized> {
 impl<R: Renderer> TextD<R> for Wrap {
     type Text = Paragraph<R>;
 
-    fn measure(renderer: &mut R, text_w: &mut TextW, text: &mut Self::Text) -> Vec2<f32> {
-        renderer.paragraph_size(text_w, &text.text, &mut text.cached_paragraph)
-        //().into()
+    fn display(renderer: &mut R,  text: &Self::Text, color: Color) {
+        
     }
-
-    fn display(renderer: &mut R, text_w: &TextW, text: &Self::Text, color: Color) {
-        renderer.render_paragraph(text_w, &text.text, &text.cached_paragraph, color);
+    fn measure(renderer: &mut R,  text: &mut Self::Text) -> Vec2<f32> {
+        ().into()
     }
 }
 
@@ -70,12 +70,12 @@ pub struct Linear;
 impl<R: Renderer> TextD<R> for Linear {
     type Text = str;
 
-    fn display(renderer: &mut R, text_w: &TextW, text: &Self::Text, color: Color) {
-        renderer.render_text(text_w, text, color);
+    fn display(renderer: &mut R,  text: &Self::Text, color: Color) {
+        
     }
 
-    fn measure(renderer: &mut R, text_w: &mut TextW, text: &mut Self::Text) -> Vec2<f32> {
-        renderer.text_size(text_w, text)
+    fn measure(renderer: &mut R,  text: &mut Self::Text) -> Vec2<f32> {
+        ().into()
     }
 }
 
@@ -442,7 +442,7 @@ impl<'skip, R: Renderer> Div<R> {
     }
 
     #[inline]
-    pub fn render<Style: crate::Style>(mut self, style: impl Into<Style>) -> Self {
+    pub fn render<Style: crate::Style<R>>(mut self, style: impl Into<Style>) -> Self {
         style.into().render(&self.widget, &mut self.renderer);
         self
     }
@@ -512,7 +512,7 @@ impl<'skip, R: Renderer, TD: TextD<R>> Text<'skip, TD, R> {
 
     #[inline]
     pub fn size(mut self, size: f32) -> Self {
-        self.widget.size = size;
+        //self.widget.size = size;
         self
     }
 
@@ -527,8 +527,8 @@ impl<'skip, R: Renderer, TD: TextD<R>> Text<'skip, TD, R> {
     }
 
     #[inline]
-    pub fn font_id(mut self, font: &'skip str) -> Self {
-        self.widget.font = Some(font);
+    pub fn font(mut self, font: &'skip mut R::Font) -> Self {
+        self.font = Some(font);
         self
     }
 
@@ -536,7 +536,7 @@ impl<'skip, R: Renderer, TD: TextD<R>> Text<'skip, TD, R> {
     pub fn render<C: Into<Color>>(mut self, color: C) -> Self {
         //self.renderer.render_text(&self.widget, color.into());
         if let Some(text) = &self.text {
-            TD::display(&mut self.renderer, &self.widget,text, color.into());
+            //TD::display(&mut self.renderer, &self.widget,text, color.into());
         }
         self
     }
@@ -551,23 +551,23 @@ impl<'skip, R: Renderer, TD: TextD<R>> Text<'skip, TD, R> {
 
     pub fn align<Align: crate::Align, Apply: crate::Apply>(mut self) -> Self {
         let res = Align::calc(self.get_parent(), self.get_size());
-        Apply::apply(res, &mut self.widget.pos);
+        Apply::apply(res, &mut self.pos);
         self
     }
 
     #[inline]
     pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
-        Op::apply(&mut self.widget.pos,pos.into());
+        Op::apply(&mut self.pos,pos.into());
         self
     }
 
     pub fn on<On: crate::On<'skip, R, Self, Out = Self>>(mut self, f: impl FnMut(On::Arg<'_>) -> On::FnOut) -> Self {
         let mouse_pos = self.renderer.mouse_pos();
         let size = self.get_size();
-        let hovered = (mouse_pos.x >= self.widget.pos.x)
-            && (mouse_pos.y >= self.widget.pos.y)
-            && (mouse_pos.x <= (self.widget.pos.x + size.x))
-            && (mouse_pos.y <= (self.widget.pos.y + size.y));
+        let hovered = (mouse_pos.x >= self.pos.x)
+            && (mouse_pos.y >= self.pos.y)
+            && (mouse_pos.x <= (self.pos.x + size.x))
+            && (mouse_pos.y <= (self.pos.y + size.y));
         if !hovered {
             return self;
         }
@@ -635,9 +635,9 @@ impl<R: Renderer> Child<R> for Clip {
     }
 }
 
-pub struct Leak;
+pub struct Overflow;
 
-impl<R: Renderer> Child<R> for Leak {
+impl<R: Renderer> Child<R> for Overflow {
     fn start(renderer: R, _dim: &Vec2<f32>, _pos: &Vec2<f32>) -> R {
         renderer
     }
@@ -695,8 +695,8 @@ impl<'skip, R: Renderer, W: Widget<'skip, R>> On<'skip, R, W> for Mouses {
     }
 } 
 
-pub trait Style {
-    fn render<R: Renderer>(self, div: &DivW, renderer: &mut R);
+pub trait Style<R: Renderer> {
+    fn render(self, div: &DivW, renderer: &mut R);
 }
 
 pub struct Plain<Color: Into<crate::Color> = ()> {
@@ -704,20 +704,21 @@ pub struct Plain<Color: Into<crate::Color> = ()> {
     pub rad: f32,
 }
 
-pub struct Image<Color: Into<crate::Color> = ()> {
-    pub img_id: ImageId,
+pub struct Image<'skip, R: Renderer,Color: Into<crate::Color> = ()> {
+    //pub img_id: ImageId,
+    pub src: &'skip R::Image,
     pub tint: Color
 }
 
-impl<Color: Into<crate::Color>> Style for Plain<Color> {
-    fn render<R: Renderer>(self, div: &DivW, renderer: &mut R) {
+impl<Color: Into<crate::Color>, R: Renderer> Style<R> for Plain<Color> {
+    fn render(self, div: &DivW, renderer: &mut R) {
         renderer.render_div(div, self.color.into(), self.rad);
     }
 }
 
-impl Style for Image  {
-    fn render<R: Renderer>(self, div: &DivW, renderer: &mut R) {
-        renderer.render_img(div, self.tint.into(), self.img_id);
+impl<'skip, R: Renderer> Style<R> for Image<'skip, R>  {
+    fn render(self, div: &DivW, renderer: &mut R) {
+//        renderer.render_img(div, self.tint.into(), self.img_id);
     }
 }
 
@@ -733,15 +734,16 @@ impl<Color: Into<crate::Color>> From<(Color, f32)> for Plain<Color> {
     }
 }
 
-impl From<ImageId> for Image<()> {
-    fn from(value: ImageId) -> Self {
-        Self { img_id: value, tint: () }
+impl<'skip, R: Renderer> From<&'skip R::Image> for Image<'skip, R> {
+    fn from(value: &'skip R::Image) -> Self {
+        Self { src: value, tint: ().into() }
     }
 }
 
-impl<Color: Into<crate::Color>> From<(ImageId, Color)> for Image<Color> {
-    fn from(value: (ImageId, Color)) -> Self {
-        Self { img_id: value.0, tint: value.1 }
+
+impl<'skip, R: Renderer, Color: Into<crate::Color>> From<(&'skip R::Image, Color)> for Image<'skip, R, Color> {
+    fn from(value: (&'skip R::Image, Color)) -> Self {
+        Self { src: value.0, tint: value.1 }
     }
 }
 
@@ -810,13 +812,15 @@ impl Apply for Y {
 
 pub trait Renderer {
     type Paragraph;
+    type Image;
+    type Font;
     fn render_div(&mut self, div: &DivW, color: Color, radius: f32);
     fn render_img(&mut self, img: &DivW, color: Color, image_id: ImageId);
     fn render_circle(&mut self, circle: &CircleW, color: Color);
-    fn render_paragraph<'skip>(&mut self, text_w: &TextW<'skip>, text: &str, paragraph: &Option<Self::Paragraph>, color: Color);
-    fn render_text<'skip>(&mut self, text_w: &TextW<'skip>, text: &str, color: Color);
-    fn text_size<'skip>(&mut self, text_w: &TextW<'skip>, text: &str) -> Vec2<f32>;
-    fn paragraph_size<'skip>(&mut self, text_w: &TextW<'skip>, text: &str, paragraph: &mut Option<Self::Paragraph>) -> Vec2<f32>;
+    //fn render_paragraph<'skip>(&mut self, text_w: &TextW<'skip>, text: &str, paragraph: &Option<Self::Paragraph>, color: Color);
+    //fn render_text<'skip>(&mut self, text_w: &TextW<'skip>, text: &str, color: Color);
+    //fn text_size<'skip>(&mut self, text_w: &TextW<'skip>, text: &str) -> Vec2<f32>;
+    //fn paragraph_size<'skip>(&mut self, text_w: &TextW<'skip>, text: &str, paragraph: &mut Option<Self::Paragraph>) -> Vec2<f32>;
     fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>);
     fn mouse_pos(&mut self) -> Vec2<f32>;
     //fn mouse_state(&mut self) -> &Vec<(Mouse, State)>;
@@ -943,16 +947,17 @@ impl<'skip, R: Renderer, TD: TextD<R>> Widget<'skip, R> for Text<'skip, TD, R> {
     }
     #[inline]
     fn inherit<P: Into<Vec2<f32>>, PO: Into<Vec2<f32>>>(_dim: P, pos: PO, renderer: R) -> Self {
-        let mut widget: TextW<'_> = ().into();
-        widget.pos = pos.into();
-        Self { widget, renderer, text: None, text_d: TD::default() }
+        //let mut widget: TextW<'_> = ().into();
+        //widget.pos = pos.into();
+        Self { pos: pos.into(), font: None, renderer, text: None, text_d: TD::default() }
     }
     
     #[inline]
     fn size(&mut self) -> Vec2<f32> {
         //self.renderer.text_size(&self.widget)
         if let Some(text) = &mut self.text {
-            return TD::measure(&mut self.renderer, &mut self.widget, text)
+            //return TD::measure(&mut self.renderer, &mut self.widget, text)
+            
         }
         ().into()
     }
@@ -1014,20 +1019,6 @@ struct IterArg<Iter: Iterator> {
     pub items: Iter,
     pub column: Option<usize>
 }
-
-impl<'skip> From<()> for TextW<'skip> {
-    #[inline]
-    fn from(_value: ()) -> Self {
-        Self {
-            //text: None,
-            font: None,
-            //font_id: 0,
-            size: 0.0, 
-            pos: ().into(),
-        }
-    }
-}
-
 
 impl<Iter: Iterator> From<(Iter, usize)> for IterArg<Iter> {
     #[inline]
