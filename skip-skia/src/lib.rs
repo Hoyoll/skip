@@ -5,13 +5,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+use gl::types;
 use glutin::{
     context::NotCurrentGlContext,
     display::{GetGlDisplay, GlDisplay},
     surface::GlSurface,
 };
 use raw_window_handle::HasWindowHandle;
-use skip::{Mouse, State, Vec2};
+use skip::{Horizontal, Mouse, State, Vec2};
 use winit::event_loop::EventLoopProxy;
 pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
     let event_loop: winit::event_loop::EventLoop<Event> =
@@ -34,14 +35,141 @@ pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
 
     event_loop.run_app(&mut wn);
 }
-#[derive(Clone)]
-pub struct Event<T: 'static>(winit::event_loop::EventLoopProxy<T>);
 
-impl<T: 'static> Event<T> {
-    pub fn send_event(&self, event: T) {
-        self.0.send_event(event);
+struct Runner {
+    window_container: WindowContainer,
+    event_loop: winit::event_loop::EventLoop,
+    res: Res
+}
+
+impl Runner {
+    fn run_app(&mut self, app: &mut impl App) {
+        self.event_loop.run_app(app);
     }
 }
+
+fn prepare<App: crate::App>(assets: &AssetManager) -> (winit::event_loop::EventLoopProxy<Request<App::CanvasIdentifier, App::Event>>, Runner) {    
+    let event_loop = winit::event_loop::EventLoop::with_user_event().build().unwrap();
+    let proxy = event_loop.create_proxy();
+    let mut font_collection = skia_safe::textlayout::FontCollection::new();
+    font_collection.set_asset_font_manager(Some(assets.font_loader));
+    let runner = Runner {
+        window_container: WindowContainer::new(),
+        event_loop,
+        res: Res { 
+            current_focus: winit::window::WindowId::dummy(), 
+            on: Vec::new(), 
+            mouse_pos: ().into(), 
+            font_collection, 
+            paint: skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.0), None) }
+    };
+
+    (proxy, runner)
+}
+
+struct Res {
+    current_focus: winit::window::WindowId,
+    on: Vec<(skip::Mouse, skip::State)>,
+    mouse_pos: Vec2<f32>,
+    font_collection: skia_safe::textlayout::FontCollection,
+    paint: skia_safe::Paint,
+}
+
+
+type WindowContainer = HashMap<winit::window::WindowId, App::CanvasIdentifier>;
+
+enum Request<T: Eq + PartialEq, E: 'static> {
+    Canvas(winit::window::WindowAttributes, T),
+    Event(E),
+    End,
+}
+
+trait App {
+    type Event: 'static;
+    type CanvasIdentifier: Eq + PartialEq;
+ 
+    fn on_user_event(&mut self, event: Self::Event);
+    fn on_draw(&mut self, on: &Self::CanvasIdentifier, res: &Res) -> Option<Duration>;
+    fn on_key(&mut self, on: &Self::CanvasIdentifier, key: (skip::Key, skip::State)) {}
+    fn on_canvas(&mut self, window: Window, id: &Self::CanvasIdentifier);
+}
+
+struct Canvas {
+    window: winit::window::Window,
+    surface: skia_safe::Surface,
+    dr_context: skia_safe::gpu::DirectContext,
+    skia_context: glutin::context::PossiblyCurrentContext,
+    fb_info: skia_safe::gpu::gl::FramebufferInfo,
+    gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>, 
+    next_redraw: Option<Instant>,
+}
+
+impl Canvas {
+    fn start(&mut self, res: &Res) -> impl FnOnce(skip::Horizontal<Brush>) { 
+    }
+}
+
+struct Brush {
+    on: &'skip Vec<(Mouse, State)>,
+    mouse_pos: &'skip skip::Vec2<f32>,
+    canvas: &'skip skia_safe::Canvas,
+    text_style: &'skip mut skia_safe::textlayout::TextStyle,
+    font_collection: &'skip skia_safe::textlayout::FontCollection,
+    paragrah_style: &'skip mut skia_safe::textlayout::ParagraphStyle,
+    window_dim: skip::Vec2<f32>,
+    p_pos: Vec2<f32>,
+    p_dim: Vec2<f32>,   
+}
+
+impl skip::Renderer for Brush {
+    type Paragraph = TextCache;
+    type Image = skia_safe::Image;
+    type Font = Font;
+
+    fn render_paragraph(&mut self, text_w: &mut skip::TextW, text: &str, paragraph: &mut Option<Self::Paragraph>, font: &Self::Font, color: skip::Color) {
+    }
+}
+
+struct TextCache {
+    font: u32,
+    /// Typeface::unique_id
+    //text: &'skip str,
+    width: f32,
+    size: f32,
+    color: skip::Color,
+    paragraph: skia_safe::textlayout::Paragraph,
+}
+
+#[derive(Default)]
+struct AssetManager {
+    font_loader: skia_safe::FontMgr,
+}
+
+impl AssetManager {
+    pub fn new_image(
+        data: &[u8],
+        //img_id: Option<skip::ImageId>,
+    ) -> Option<skia_safe::Image> {
+        let data = skia_safe::Data::new_copy(data);
+        skia_safe::Image::from_encoded(data)
+    }
+
+    pub fn new_font(&mut self, data: &[u8]) -> Result<crate::Font, ()> {
+        let tf = self.font_loader.new_from_data(data, None);
+        match tf {
+            Some(tf) => {
+                let mut font = skia_safe::Font::from_typeface(&tf, None);
+                Ok(Font { font, tf })
+            }
+            None => Err(()),
+        }
+    }
+}
+pub struct Font {
+    font: skia_safe::Font,
+    tf: skia_safe::Typeface,
+}
+mod deprecated {
 
 pub trait AppController<T> {
     fn bootstrap<'skip>(&mut self, context: Context<'skip>, event: EventLoopProxy<T>);
@@ -53,8 +181,8 @@ pub trait AppController<T> {
         layout: skip::Horizontal<Canvas>,
     ) -> Option<Duration>;
     fn on_key(&mut self, _on_window: winit::window::WindowId, _key: (skip::Key, skip::State)) {}
+    fn get_asset(&self) -> &AssetManager;
 }
-
 pub enum Redraw {
     FocusOnly,
     Always,
@@ -87,24 +215,13 @@ pub struct Canvas<'skip> {
     //cache_index: usize,
     text_style: &'skip mut skia_safe::textlayout::TextStyle,
     font_collection: &'skip skia_safe::textlayout::FontCollection,
-    paragrah_style: &'skip mut skia_safe::textlayout::ParagraphStyle, 
+    paragrah_style: &'skip mut skia_safe::textlayout::ParagraphStyle,
     window_dim: skip::Vec2<f32>,
     p_pos: Vec2<f32>,
     p_dim: Vec2<f32>,
 }
 
-struct TextCache {
-    font: u32, /// Typeface::unique_id
-    //text: &'skip str,
-    width: f32,
-    size: f32,
-    paragraph: skia_safe::textlayout::Paragraph,
-}
 
-pub struct Font {
-    font: skia_safe::Font,
-    tf: skia_safe::Typeface,
-}
 
 impl<'a> skip::Renderer for Canvas<'a> {
     type Paragraph = TextCache;
@@ -117,52 +234,72 @@ impl<'a> skip::Renderer for Canvas<'a> {
         }
     }
 
-    fn render_text<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, color: skip::Color) {
-        
-    }
+    fn render_paragraph(
+        &mut self,
+        text_w: &mut skip::TextW,
+        text: &str,
+        paragraph: &mut Option<Self::Paragraph>,
+        font: &Self::Font,
+        color: skip::Color,
+    ) {
+        match paragraph {
+            None => {}
+            Some(cache) => {}
+        }
 
-    fn text_size<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str) -> Vec2<f32> {
-        ().into()
-    }
+        if let Some(p) = paragraph {
+            if p.font != font.tf.unique_id() {}
 
-    fn render_paragraph<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, paragraph: &Option<Self::Paragraph>, color: skip::Color) {
-        if let Some(paragraph) = paragraph {
-            paragraph.paragraph.paint(self.canvas, (text_w.pos.x, text_w.pos.y)); 
+            if p.color != color {}
+
+            if p.width != self.p_dim.x {}
+
+            if p.size != font.font.size() {}
         }
     }
 
-    fn paragraph_size<'skip>(&mut self, text_w: &skip::TextW<'skip>, text: &str, paragraph: &mut Option<Self::Paragraph>) -> Vec2<f32> {
-        ().into() 
-    }
-
-    fn _paragraph_size<'skip>(&mut self, text: &mut skip::TextW<'skip>) -> Vec2<f32> {
+    fn render_text(
+        &mut self,
+        text_w: &mut skip::TextW,
+        text: &str,
+        font: &Self::Font,
+        color: skip::Color,
+    ) {
         self.text_style.set_font_size(text.size);
         self.text_style.set_font_families(&[text.font]);
         self.paragrah_style.set_text_style(self.text_style);
         let prov = skia_safe::textlayout::TypefaceFontProvider::new();
-        prov.register_typeface(typeface, alias);
-    
+        //prov.register_typeface(typeface, alias);
+
+        self.font_collection.set_asset_font_manager(prov);
         //prov.register_typeface(typeface, alias)
-        let mut builder = skia_safe::textlayout::ParagraphBuilder::new(self.paragrah_style, self.font_collection.clone());
+        let mut builder = skia_safe::textlayout::ParagraphBuilder::new(
+            self.paragrah_style,
+            self.font_collection.clone(),
+        );
         builder.add_text(text.text);
         //self.font_collection.set_asset_font_manager(font_manager);
         let paragraph = builder.build();
 
-        let size = Vec2::new(paragraph.max_width() as f32, paragraph.longest_line() as f32);
-        size
+        let size = Vec2::new(
+            paragraph.max_width() as f32,
+            paragraph.longest_line() as f32,
+        );
     }
-    fn _render_paragraph<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
-        self.text_cache[self.cache_index].paragraph.paint(self.canvas, (text.pos.x, text.pos.y));
-        self.cache_index += 1;
-    }
-
-    fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(&mut self, dim: Dim, pos: Pos) {
+    fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(
+        &mut self,
+        dim: Dim,
+        pos: Pos,
+    ) {
         self.p_pos = pos.into();
         self.p_dim = dim.into();
     }
 
     fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
-        ((self.p_dim.x, self.p_dim.y).into(), (self.p_pos.x, self.p_pos.y).into())
+        (
+            (self.p_dim.x, self.p_dim.y).into(),
+            (self.p_pos.x, self.p_pos.y).into(),
+        )
     }
 
     fn canvas_size(&mut self) -> skip::Vec2<f32> {
@@ -184,68 +321,18 @@ impl<'a> skip::Renderer for Canvas<'a> {
         }
         //dbg!(div);
         //println!("draw!");
-        self.paint
-            .set_argb(color.a, color.r, color.g, color.b);
+        self.paint.set_argb(color.a, color.r, color.g, color.b);
         self.canvas.draw_round_rect(
             skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.size.x, div.size.y),
             radius,
             radius,
             self.paint,
         );
-
     }
     fn render_circle(&mut self, circle: &skip::CircleW, color: skip::Color) {
-        self.paint.set_argb(
-            color.a,
-            color.r,
-            color.g,
-            color.b,
-        );
+        self.paint.set_argb(color.a, color.r, color.g, color.b);
         self.canvas
             .draw_circle((circle.pos.x, circle.pos.y), circle.radius, self.paint);
-
-    }
-    
-    #[inline]
-    fn _text_size<'skip>(&mut self, text: &skip::TextW<'skip>) -> skip::Vec2<f32> {
-        if text.text == "" {
-            ().into()
-        }
-        let fonts = &mut self.fonts[0];
-        fonts.set_size(text.size);
-        let tf= fonts.typeface();
-        let did = tf.unique_id();
-        //fonts.typeface().family_name();
-        //let metric = fonts.metrics();
-        let (_, rect) = fonts.measure_str(text.text, None);
-        let height = rect.height().ceil() + text.size / 10.0;
-        let width = rect.width().ceil() + text.size / 10.0;
-        (width, height).into()
-    }
-
-    fn _render_text<'skip>(&mut self, text: &skip::TextW<'skip>, color: skip::Color) {
-        if text.text == "" {
-            return;
-        }
-        if text.pos.x >= self.window_dim.x || text.pos.y >= self.window_dim.y {
-            return;
-        }
-        let size = self.text_size(text);
-        let right = text.pos.x + size.x;
-        let bottom = text.pos.y + size.y;
-
-        if right <= 0.0 || bottom <= 0.0 {
-            return;
-        }
-        self.paint
-            .set_argb(color.a, color.r, color.g, color.b);
-        let font = &self.fonts[text.font_id]; 
-        let metrics = font.metrics();
-        const MOD: f32 = 4.0;
-        let baseline_y = text.pos.y - metrics.1.ascent - text.size / MOD;
-        self.canvas
-            .draw_str(text.text, (text.pos.x - MOD, baseline_y), font, self.paint);
-    
     }
 
     fn render_img(&mut self, img: &skip::DivW, tint: skip::Color, image_id: skip::ImageId) {
@@ -261,8 +348,7 @@ impl<'a> skip::Renderer for Canvas<'a> {
         }
         match self.images.get(image_id) {
             Some(image) => {
-                self.paint
-                    .set_argb(tint.a, tint.r, tint.g, tint.b);
+                self.paint.set_argb(tint.a, tint.r, tint.g, tint.b);
                 self.canvas.draw_image_rect(
                     image,
                     None,
@@ -272,14 +358,13 @@ impl<'a> skip::Renderer for Canvas<'a> {
             }
             None => (),
         }
- 
     }
 
     fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>) {
         self.canvas.save();
         let rect = skia_safe::Rect::from_xywh(pos.x, pos.y, dim.x, dim.y);
         let mut path = skia_safe::Path::rect(&rect, None);
-        self.canvas.clip_path(&path, None, Some(true)); 
+        self.canvas.clip_path(&path, None, Some(true));
     }
     fn end_clip(&mut self) {
         self.canvas.restore();
@@ -419,21 +504,12 @@ impl<'skip> Context<'skip> {
         self.windows.remove(id);
     }
 
-    pub fn new_font(&mut self, data: &[u8], font_id: Option<skip::Font>) -> Result<skip::Font, ()> {
+    pub fn new_font(&mut self, data: &[u8]) -> Result<crate::Font, ()> {
         let tf = self.font_mgr.new_from_data(data, None);
         match tf {
             Some(tf) => {
                 let font = skia_safe::Font::from_typeface(&tf, None);
-                match font_id {
-                    Some(id) => {
-                        self.fonts.insert(id, font);
-                        Ok(id)
-                    }
-                    None => {
-                        self.fonts.push(font);
-                        Ok(self.fonts.len() - 1)
-                    }
-                }
+                Ok(Font { font, tf })
             }
             None => Err(()),
         }
@@ -442,22 +518,10 @@ impl<'skip> Context<'skip> {
     pub fn new_image(
         &mut self,
         data: &[u8],
-        img_id: Option<skip::ImageId>,
-    ) -> Result<skip::ImageId, ()> {
+        //img_id: Option<skip::ImageId>,
+    ) -> Option<skia_safe::Image> {
         let data = skia_safe::Data::new_copy(data);
-        match skia_safe::Image::from_encoded(data) {
-            Some(img) => match img_id {
-                Some(id) => {
-                    self.images.insert(id, img);
-                    Ok(id)
-                }
-                None => {
-                    self.images.push(img);
-                    Ok(self.images.len() - 1)
-                }
-            },
-            None => Err(()),
-        }
+        skia_safe::Image::from_encoded(data)
     }
 
     pub fn set_visible(&mut self, id: &winit::window::WindowId, visible: bool) {
@@ -490,13 +554,16 @@ impl<T: 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
     for WinitRenderer<T, A>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.app.bootstrap(Context {
-            windows: &mut self.windows,
-            event_loop,
-            fonts: &mut self.fonts,
-            font_mgr: &mut self.font_mgr,
-            images: &mut self.images,
-        }, self.proxy.clone());
+        self.app.bootstrap(
+            Context {
+                windows: &mut self.windows,
+                event_loop,
+                fonts: &mut self.fonts,
+                font_mgr: &mut self.font_mgr,
+                images: &mut self.images,
+            },
+            self.proxy.clone(),
+        );
     }
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: T) {
@@ -668,7 +735,7 @@ impl<T: 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
         }
     }
 }
-
+}
 fn keycode_translate(key: winit::keyboard::KeyCode) -> skip::Key {
     use skip::Key;
     use winit::keyboard::*;

@@ -5,7 +5,7 @@ use std::{
 
 use reqwest::blocking::Client;
 use serde_json::Value;
-use skip::{Clip, Div, Font, Leak, Mouse, Mouses, Plain, Proc, Set, State, Text, Vertical, Wrap};
+use skip::{Clip, Div, Font, Leak, Linear, Mouse, Mouses, Plain, Proc, Set, State, Text, Vertical, Wrap};
 use skip_skia::{AppController, Canvas, Event, run_app};
 use winit::{
     event_loop::EventLoopProxy,
@@ -144,8 +144,8 @@ impl AppController<Music> for App {
             }
         }
 
-        self.fonts.roboto = context.new_font(&asset::ROBOTO, Some(0)).unwrap();
-        self.fonts.fira_code = context.new_font(&asset::FIRA_CODE, Some(1)).unwrap();
+//        self.fonts.roboto = context.new_font(&asset::ROBOTO, Some(0)).unwrap();
+//        self.fonts.fira_code = context.new_font(&asset::FIRA_CODE, Some(1)).unwrap();
 
         let attr = WindowAttributes::default()
             .with_resizable(false)
@@ -185,11 +185,13 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut EntryList {
             None => vertical, //idk, currently just zonk XD
             Some(list) => vertical
                 .gap(5.0)
-                .iter(list.iter().enumerate(), |text: Text<Wrap,_>, (idx, entry)| {
+                .iter(list.iter().enumerate(), |text: Text<_>, (idx, entry)| {
+                let s = String::new();
                 text
-                .font_id(font)
-                .size(40.0)
-                .text(&entry.name)
+                //.font_id(font)
+                //.size(40.0)
+
+                .render::<Linear>("")
                 .expr((&entry.download_url, |text, kind| {
                     match kind {
                         None => {
