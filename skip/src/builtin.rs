@@ -9,8 +9,7 @@ pub(crate) struct ProcArg<'skip, R: Renderer, P: Proc<'skip, R>> {
 }
 
 pub(crate) trait Widget<'skip, R: Renderer> {
-    type Arg;
-    fn inherit<PO: Into<Vec2<f32>>>(arg: Self::Arg, pos: PO, renderer: R) -> Self;
+    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self;
     fn renderer(self) -> R;
     fn size(&self) -> Vec2<f32>;
     //fn mouse_state(&self) -> &Vec<(Mouse, State)>;

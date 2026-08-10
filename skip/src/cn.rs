@@ -1,5 +1,5 @@
 use crate::{
-    Color, Dec, Div, Font, Horizontal, Inc, Leak, Plain, Proc, Renderer, Set, Text, Vec2, Wrap,
+    Color,Div, Horizontal, Inc, Inherit, Linear, Overflow, Plain, Proc, Renderer, Set, Text, Vec2
 };
 
 pub struct Border<Color: Into<crate::Color>, Thickness: Into<Vec2<f32>>, Offset: Into<Vec2<f32>>>(
@@ -23,11 +23,12 @@ impl<
         let mut pad = self.2.into();
         pad.x -= large.x;
         pad.y -= large.y;
-        widget.child::<Div<_>, Leak>(|div| {
-            div.expr((&true, |div, s| div))
-                .size::<Inc>((large.x * 2.0, large.y * 2.0))
-                .position::<Inc>(pad)
-                .render::<Plain<_>>(self.0)
+        widget.child(Overflow,|div: Div<_>| {
+            div
+            .size::<Set>(Inherit)
+            .size::<Inc>((large.x * 2.0, large.y * 2.0))
+            .position::<Inc>(pad)
+            .render::<Plain<_>>(self.0)
         })
     }
 }
@@ -54,26 +55,26 @@ impl TextBox {
     }
 }
 
-impl<'skip, R: Renderer> Proc<'skip, R> for &'skip mut TextBox {
+impl<'skip, R: Renderer + 'skip> Proc<'skip, R> for &'skip mut TextBox {
     type Widget = Horizontal<R>;
-    type Arg = (Font, f32, Color);
+    type Arg = (&'skip R::Font, f32, Color);
     fn consume(self, widget: Self::Widget, (font, size, color): Self::Arg) -> Self::Widget {
         widget
-            .add(|text: Text<Wrap, _>| {
-                text.font_id(font)
+            .add(|text: Text<Linear, _>| {
+                text
+                    .content((&self.text[0..self.insert_idx],font))
                     .size(size)
-                    .text(&self.text[0..self.insert_idx])
                     .render(&color)
             })
             .add(|cursor: Div<_>| {
-                cursor.size::<Set>((1.0, size))
-                //.color(&color)
-                //.render(&color)
+                cursor
+                    .size::<Set>((1.0, size)) 
+                    .render::<Plain<_>>(&color)
             })
-            .add(|text: Text<Wrap, _>| {
-                text.font_id(font)
+            .add(|text: Text<Linear, _>| {
+                text
+                    .content((&self.text[self.insert_idx..self.text.len()], font))
                     .size(size)
-                    .text(&self.text[self.insert_idx..self.text.len()])
                     .render(&color)
             })
     }
