@@ -22,21 +22,21 @@ pub struct CircleW {
     pub radius: f32,
     pub pos: Vec2<f32>,
 }
+//struct TextMetrics {
+//    ascent: f32,
+//    descent: f32,
+//    line_height: f32,
+//}
+
+//cursor_height = metrics.ascent + metrics.descent; tight
+//cursor_height = metrics.line_height; span
+
 
 pub struct Text<'skip, TD: TextD<'skip, R>, R: Renderer> {
     widget: TextW,
     content: Option<(TD::Text, &'skip R::Font)>,
     renderer: R,
 }
-struct TextMetrics {
-    ascent: f32,
-    descent: f32,
-    line_height: f32,
-}
-
-//cursor_height = metrics.ascent + metrics.descent; tight
-//cursor_height = metrics.line_height; span
-
 pub struct TextW {
     pub dim: Vec2<f32>,
     pub pos: Vec2<f32>,
@@ -45,11 +45,11 @@ pub struct TextW {
 
 trait TextD<'skip, R: Renderer> {
     type Text: 'skip;
-    fn measure(text: Self::Text, font: &R::Font) -> (Vec2<f32>, Self::Text);
+    fn measure(renderer: &mut R, text_w: &mut TextW, text: Self::Text, font: &R::Font) -> Self::Text;
 
     fn display(
         renderer: &mut R,
-        widget: &mut TextW,
+        widget: &TextW,
         text: Self::Text,
         font: &R::Font,
         color: Color,
@@ -63,12 +63,14 @@ pub struct Paragraph<R: Renderer> {
 }
 impl<'skip, R: Renderer + 'skip> TextD<'skip, R> for Wrap {
     type Text = &'skip mut Paragraph<R>;
-    fn measure(text: Self::Text, font: &<R as Renderer>::Font) -> (Vec2<f32>, Self::Text) {
-        (().into(), text)
+    fn measure(renderer: &mut R, text_w: &mut TextW, text: Self::Text, font: &<R as Renderer>::Font) -> Self::Text {
+        renderer.measure_paragraph(text_w, &text.text, &mut text.cached_paragraph, font);
+        text
     }
+
     fn display(
         renderer: &mut R,
-        widget: &mut TextW,
+        widget: &TextW,
         text: Self::Text,
         font: &<R as Renderer>::Font,
         color: Color,
@@ -82,12 +84,13 @@ pub struct Linear;
 
 impl<'skip, R: Renderer> TextD<'skip, R> for Linear {
     type Text = &'skip str;
-    fn measure(text: Self::Text, font: &<R as Renderer>::Font) -> (Vec2<f32>, Self::Text) {
-        (().into(), text)
+    fn measure(renderer: &mut R, text_w: &mut TextW, text: Self::Text, font: &<R as Renderer>::Font) -> Self::Text {
+        renderer.measure_text(text_w, text, font);
+        text
     }
     fn display(
         renderer: &mut R,
-        widget: &mut TextW,
+        widget: &TextW,
         text: Self::Text,
         font: &<R as Renderer>::Font,
         color: Color,
@@ -97,21 +100,202 @@ impl<'skip, R: Renderer> TextD<'skip, R> for Linear {
     }
 }
 
-pub struct Div<R: Renderer> {
+pub struct Div<L: LayoutRule, R: Renderer> {
     widget: DivW,
-    //ph: PhantomData<S>,
+    layout: L,
     renderer: R,
 }
 
+trait LayoutRule: Default {
+    fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
+        &mut self,
+        renderer: R,
+        parent: &Vec2<f32>,
+        f: impl FnOnce(W) -> W,
+    ) -> R;
+    fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
+        &mut self,
+        renderer: R,
+        parent: &Vec2<f32>,
+        items: impl Into<IterArg<Iter>>,
+        f: impl FnMut(W, Iter::Item) -> W,
+    ) -> R;
+}
+
+impl LayoutRule for () {
+    fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
+        &mut self,
+        renderer: R,
+        parent: &Vec2<f32>,
+        f: impl FnOnce(W) -> W,
+    ) -> R {
+        let w = f(W::inherit(parent, renderer));
+        w.renderer()
+    }
+
+    fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
+        &mut self,
+        renderer: R,
+        _parent: &Vec2<f32>,
+        _items: impl Into<IterArg<Iter>>,
+        _f: impl FnMut(W, Iter::Item) -> W,
+    ) -> R {
+        renderer
+    }
+}
+
+#[derive(Default)]
+struct Vertical {
+    offset: Vec2<f32>,
+    gap: f32,
+}
+
+impl LayoutRule for Vertical {
+    fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
+        &mut self,
+        renderer: R,
+        parent: &Vec2<f32>,
+        f: impl FnOnce(W) -> W,
+    ) -> R {
+        let w = f(W::inherit((parent.x, parent.y + self.offset.y), renderer));
+        let size = w.size();
+        self.offset.y += size.y;
+        self.offset.y += self.gap;
+        w.renderer()
+    }
+
+    fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
+        &mut self,
+        renderer: R,
+        parent: &Vec2<f32>,
+        items: impl Into<IterArg<Iter>>,
+        mut f: impl FnMut(W, Iter::Item) -> W,
+    ) -> R {
+        let mut w;
+        let mut iter_arg = items.into();
+        let mut renderer = renderer;
+        match iter_arg.column {
+            None => {
+                for item in iter_arg.items.by_ref() {
+                    w = f(
+                        W::inherit((parent.x, parent.y + self.offset.y), renderer),
+                        item,
+                    );
+                    let size = w.size();
+                    self.offset.y += size.y;
+                    self.offset.y += self.gap;
+                    renderer = w.renderer();
+                }
+                return renderer;
+            }
+            Some(column) => {
+                let mut limit: usize = 0;
+                for item in iter_arg.items.by_ref() {
+                    w = f(
+                        W::inherit(
+                            (parent.x + self.offset.x, parent.y + self.offset.y),
+                            renderer,
+                        ),
+                        item,
+                    );
+                    let size = w.size();
+                    self.offset.y += size.y;
+                    self.offset.y += self.gap;
+                    renderer = w.renderer();
+
+                    limit += 1;
+                    if column == limit {
+                        limit = 0;
+                        self.offset.y = 0.0;
+                        self.offset.x += size.x + self.gap;
+                    }
+                }
+                return renderer;
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct Horizontal {
+    offset: Vec2<f32>,
+    gap: f32,
+}
+
+impl LayoutRule for Horizontal {
+    fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
+        &mut self,
+        renderer: R,
+        parent: &Vec2<f32>,
+        mut f: impl FnOnce(W) -> W,
+    ) -> R {
+        let w = f(W::inherit((parent.x + self.offset.x, parent.y), renderer));
+        let size = w.size();
+        self.offset.x += size.x;
+        self.offset.x += self.gap;
+        w.renderer()
+    }
+
+    fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
+        &mut self,
+        renderer: R,
+        parent: &Vec2<f32>,
+        items: impl Into<IterArg<Iter>>,
+        mut f: impl FnMut(W, Iter::Item) -> W,
+    ) -> R {
+        let mut w;
+        let mut iter_arg = items.into();
+        let mut renderer = renderer;
+        match iter_arg.column {
+            None => {
+                for item in iter_arg.items.by_ref() {
+                    w = f(
+                        W::inherit((parent.x + self.offset.x, parent.y), renderer),
+                        item,
+                    );
+                    let size = w.size();
+                    self.offset.x += size.x;
+                    self.offset.x += self.gap;
+                    renderer = w.renderer();
+                }
+                return renderer;
+            }
+            Some(column) => {
+                let mut limit: usize = 0;
+                for item in iter_arg.items.by_ref() {
+                    w = f(
+                        W::inherit(
+                            (parent.x + self.offset.x, parent.y + self.offset.y),
+                            renderer,
+                        ),
+                        item,
+                    );
+                    let size = w.size();
+                    self.offset.x += size.x;
+                    self.offset.x += self.gap;
+                    renderer = w.renderer();
+
+                    limit += 1;
+                    if column == limit {
+                        limit = 0;
+                        self.offset.x = 0.0;
+                        self.offset.y += size.y + self.gap;
+                    }
+                }
+                return renderer;
+            }
+        }
+    }
+}
 
 trait Size<R: Renderer> {
-    fn get(self,renderer: &R) -> Vec2<f32>;
+    fn get(self, renderer: &R) -> Vec2<f32>;
 }
 
 struct Screen;
 
 impl<R: Renderer> Size<R> for Screen {
-    fn get(self,renderer: &R) -> Vec2<f32> {
+    fn get(self, renderer: &R) -> Vec2<f32> {
         renderer.canvas_size()
     }
 }
@@ -119,19 +303,19 @@ impl<R: Renderer> Size<R> for Screen {
 struct Inherit;
 
 impl<R: Renderer> Size<R> for Inherit {
-    fn get(self,renderer: &R) -> Vec2<f32> {
+    fn get(self, renderer: &R) -> Vec2<f32> {
         renderer.get_parent().0
     }
 }
 
 impl<R: Renderer> Size<R> for (f32, f32) {
-    fn get(self,_renderer: &R) -> Vec2<f32> {
+    fn get(self, _renderer: &R) -> Vec2<f32> {
         self.into()
     }
 }
 
 impl<R: Renderer> Size<R> for Vec2<f32> {
-    fn get(self,_renderer: &R) -> Vec2<f32> {
+    fn get(self, _renderer: &R) -> Vec2<f32> {
         self
     }
 }
@@ -139,276 +323,6 @@ impl<R: Renderer> Size<R> for Vec2<f32> {
 pub struct DivW {
     pub size: Vec2<f32>,
     pub pos: Vec2<f32>,
-}
-
-pub struct Layout {
-    pub offset: Vec2<f32>,
-    pub pos: Vec2<f32>,
-    pub size: Vec2<f32>,
-    pub gap: f32,
-}
-
-pub struct Horizontal<R: Renderer> {
-    layout: Layout,
-    renderer: R,
-}
-
-pub struct Vertical<R: Renderer> {
-    layout: Layout,
-    renderer: R,
-}
-
-impl<'skip, R: Renderer> Horizontal<R> { 
-
-    #[inline]
-    pub fn new(renderer: R) -> Self {
-        Self {
-            layout: Layout {
-                offset: ().into(),
-                pos: ().into(),
-                size: ().into(),
-                gap: 0.0,
-            },
-            renderer,
-        }
-    }
-
-    pub fn offset<Operation: crate::Operation<Item = Vec2<f32>>>(
-        mut self,
-        offset: impl Into<Operation::Item>,
-    ) -> Self {
-        let offset = offset.into();
-        Operation::apply(&mut self.layout.offset, offset.into());
-        self
-    }
-
-    #[inline]
-    pub fn add<W: Widget<'skip, R>>(mut self,f: impl FnOnce(W) -> W) -> Self {
-        let w = f(W::inherit(
-            (self.layout.pos.x + self.layout.offset.x, self.layout.pos.y),
-            self.renderer,
-        ));
-        let size = w.size();
-        self.layout.offset.x += size.x;
-        self.renderer = w.renderer();
-        self.layout.offset.x += self.layout.gap;
-        self
-    }
-
-    #[inline]
-    pub fn gap(mut self, gap: f32) -> Self {
-        self.layout.gap = gap;
-        self
-    }
-
-    #[inline]
-    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
-        self,
-        proc: impl Into<ProcArg<'skip, R, P>>,
-    ) -> Self {
-        let mut pa = proc.into();
-        pa.proc.consume(self, pa.arg)
-    }
-
-    pub fn on<On: crate::On<'skip, R, Self>>(
-        mut self,
-        f: impl FnMut(On::Arg) -> On::FnOut,
-    ) -> Self {
-        let mouse_pos = self.renderer.mouse_pos();
-        let hovered = (mouse_pos.x >= self.layout.pos.x)
-            && (mouse_pos.y >= self.layout.pos.y)
-            && (mouse_pos.x <= (self.layout.pos.x + self.layout.size.x))
-            && (mouse_pos.y <= (self.layout.pos.y + self.layout.size.y));
-        if !hovered {
-            return self;
-        }
-        On::call(f, self, mouse_pos)
-    }
-
-    #[inline]
-    pub fn iter<Iter: Iterator, W: Widget<'skip, R>>(
-        mut self,
-        items: impl Into<IterArg<Iter>>,
-        mut f: impl FnMut(W, Iter::Item) -> W,
-    ) -> Self {
-        let mut w;
-        let mut iter_arg = items.into();
-        match iter_arg.column {
-            None => {
-                for item in iter_arg.items.by_ref() {
-                    w = f(
-                        W::inherit(
-                           (self.layout.pos.x + self.layout.offset.x, self.layout.pos.y),
-                            self.renderer,
-                        ),
-                        item,
-                    );
-                    let size = w.size();
-                    self.layout.offset.x += size.x;
-                    self.renderer = w.renderer();
-                    self.layout.offset.x += self.layout.gap;
-                }
-            }
-            Some(column) => {
-                let mut limit: usize = 0;
-                for item in iter_arg.items.by_ref() {
-                    w = f(
-                        W::inherit(
-                           (
-                                self.layout.pos.x + self.layout.offset.x,
-                                self.layout.pos.y + self.layout.offset.y,
-                            ),
-                            self.renderer,
-                        ),
-                        item,
-                    );
-                    let size = w.size();
-                    self.layout.offset.x += size.x;
-                    self.renderer = w.renderer();
-                    self.layout.offset.x += self.layout.gap;
-                    limit += 1;
-                    if column == limit {
-                        limit = 0;
-                        self.layout.offset.x = 0.0;
-                        self.layout.offset.y += size.y + self.layout.gap;
-                    }
-                }
-            }
-        }
-        self
-    }
-
-    #[inline]
-    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
-        Op::apply(&mut self.layout.pos, pos.into());
-        self
-    }
-
-    #[inline]
-    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
-        f(self, expr_pack)
-    }
-}
-
-impl<'skip, R: Renderer> Vertical<R> {
-    #[inline]
-    pub fn new(renderer: R) -> Self {
-        Self {
-            layout: Layout {
-                offset: ().into(),
-                size: ().into(),
-                pos: ().into(),
-                gap: 0.0,
-            },
-            renderer,
-        }
-    }
-
-    #[inline]
-    pub fn add<W: Widget<'skip, R>>(mut self, f:  impl FnOnce(W) -> W) -> Self {
-        let w = f(W::inherit( 
-            (self.layout.pos.x, self.layout.pos.y + self.layout.offset.y),
-            self.renderer,
-        ));
-        let size = w.size();
-        self.layout.offset.y += size.y;
-        self.renderer = w.renderer();
-        self.layout.offset.y += self.layout.gap;
-        self
-    }
-
-    #[inline]
-    pub fn gap(mut self, gap: f32) -> Self {
-        self.layout.gap = gap;
-        self
-    }
-
-    #[inline]
-    pub fn position<Op: Operation<Item = Vec2<f32>>>(mut self, pos: impl Into<Op::Item>) -> Self {
-        Op::apply(&mut self.layout.pos, pos.into());
-        self
-    }
-    #[inline]
-    pub fn proc<P: Proc<'skip, R, Widget = Self>>(
-        self,
-        proc: impl Into<ProcArg<'skip, R, P>>,
-    ) -> Self {
-        let mut pa = proc.into();
-        pa.proc.consume(self, pa.arg)
-    }
-
-    #[inline]
-    pub fn iter<Iter: Iterator, W: Widget<'skip, R>>(
-        mut self,
-        mut items: impl Into<IterArg<Iter>>,
-        mut f: impl FnMut(W, Iter::Item) -> W,
-    ) -> Self {
-        let mut w;
-        let mut iter_arg = items.into();
-        match iter_arg.column {
-            None => {
-                for item in iter_arg.items.by_ref() {
-                    w = f(
-                        W::inherit(
-                           (self.layout.pos.x, self.layout.pos.y + self.layout.offset.y),
-                            self.renderer,
-                        ),
-                        item,
-                    );
-                    let size = w.size();
-                    self.layout.offset.y += size.y;
-                    self.renderer = w.renderer();
-                    self.layout.offset.y += self.layout.gap;
-                }
-            }
-            Some(column) => {
-                let mut limit: usize = 0;
-                for item in iter_arg.items.by_ref() {
-                    w = f(
-                        W::inherit(
-                           (
-                                self.layout.pos.x + self.layout.offset.x,
-                                self.layout.pos.y + self.layout.offset.y,
-                            ),
-                            self.renderer,
-                        ),
-                        item,
-                    );
-                    let size = w.size();
-                    self.layout.offset.y += size.y;
-                    self.renderer = w.renderer();
-                    self.layout.offset.y += self.layout.gap;
-                    limit += 1;
-                    if column == limit {
-                        limit = 0;
-                        self.layout.offset.y = 0.0;
-                        self.layout.offset.x += size.x + self.layout.gap;
-                    }
-                }
-            }
-        }
-        self
-    }
-
-    pub fn on<On: crate::On<'skip, R, Self>>(
-        mut self,
-        f: impl FnMut(On::Arg) -> On::FnOut,
-    ) -> Self {
-        let mouse_pos = self.renderer.mouse_pos();
-        let hovered = (mouse_pos.x >= self.layout.pos.x)
-            && (mouse_pos.y >= self.layout.pos.y)
-            && (mouse_pos.x <= (self.layout.pos.x + self.layout.size.x))
-            && (mouse_pos.y <= (self.layout.pos.y + self.layout.size.y));
-        if !hovered {
-            return self;
-        }
-        On::call(f, self, mouse_pos)
-    }
-
-    #[inline]
-    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
-        f(self, expr_pack)
-    }
 }
 
 impl<'skip, R: Renderer> Circle<R> {
@@ -443,7 +357,7 @@ impl<'skip, R: Renderer> Circle<R> {
     }
 }
 
-impl<'skip, R: Renderer> Div< R> {
+impl<'skip, R: Renderer, L: LayoutRule> Div<L, R> {
     #[inline]
     pub fn proc<P: Proc<'skip, R, Widget = Self>>(
         self,
@@ -466,6 +380,7 @@ impl<'skip, R: Renderer> Div< R> {
         self
     }
 
+    #[inline]
     pub fn on<On: crate::On<'skip, R, Self>>(
         mut self,
         f: impl FnMut(On::Arg) -> On::FnOut,
@@ -484,22 +399,26 @@ impl<'skip, R: Renderer> Div< R> {
     #[inline]
     pub fn child<W: Widget<'skip, R>>(
         mut self,
-        child: impl Child<R>,
         f: impl FnOnce(W) -> W,
     ) -> Self {
         self.renderer
             .set_parent(&self.widget.size, &self.widget.pos);
-
-        let w = f(W::inherit(
-           &self.widget.pos,
-            child.start(self.renderer, &self.widget.size, &self.widget.pos),
-        ));
-        self.renderer = child.end(w.renderer());
+        self.renderer = self.layout.layout(self.renderer, &self.widget.pos, f);
         self
     }
 
     #[inline]
-    pub fn size<Op: Operation<Item = Vec2<f32>>>(mut self,size: impl Size<R>) -> Self {
+    pub fn iter<Iter: Iterator, W: Widget<'skip, R>>(
+        mut self,
+        items: impl Into<IterArg<Iter>>,
+        f: impl FnMut(W, Iter::Item) -> W,
+    ) -> Self {
+        self.renderer = self.layout.iter(self.renderer, &self.widget.pos, items, f);
+        self
+    }
+
+    #[inline]
+    pub fn size<Op: Operation<Item = Vec2<f32>>>(mut self, size: impl Size<R>) -> Self {
         let s = size.get(&self.renderer);
         Op::apply(&mut self.widget.size, s);
         self
@@ -520,23 +439,12 @@ impl<'skip, R: Renderer> Div< R> {
 impl<'skip, TD: TextD<'skip, R>, R: Renderer> Text<'skip, TD, R> {
     #[inline]
     pub fn content(mut self, (text, font): (TD::Text, &'skip R::Font)) -> Self {
-        let (dim, t) = TD::measure(text, font);
-        self.widget.dim = dim;
+        let t = TD::measure(&mut self.renderer, &mut self.widget, text, font);
+        
         self.content = Some((t, font));
         self
     }
-
-    #[inline]
-    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
-        f(self, expr_pack)
-    }
-
-    #[inline]
-    pub fn size(mut self, size: f32) -> Self {
-        self.widget.size = size;
-        self
-    }
-
+    
     #[inline]
     pub fn render(mut self, color: impl Into<Color>) -> Self {
         if let Some((text, font)) = self.content {
@@ -546,9 +454,21 @@ impl<'skip, TD: TextD<'skip, R>, R: Renderer> Text<'skip, TD, R> {
                 text,
                 font,
                 color.into(),
-                );
+            );
             self.content = Some((t, font));
-        } 
+        }
+        self
+    }
+
+
+    #[inline]
+    pub fn expr<T>(self, (expr_pack, f): (T, impl FnOnce(Self, T) -> Self)) -> Self {
+        f(self, expr_pack)
+    }
+
+    #[inline]
+    pub fn size(mut self, size: f32) -> Self {
+        self.widget.size = size;
         self
     }
 
@@ -593,7 +513,6 @@ pub trait Operation {
     type Item;
 
     fn apply(initial_item: &mut Self::Item, diff: Self::Item);
-
 }
 
 pub struct Inc;
@@ -652,19 +571,19 @@ impl Operation for Time {
 }
 
 pub trait Child<R: Renderer> {
-    fn start(&self,renderer: R, dim: &Vec2<f32>, pos: &Vec2<f32>) -> R;
-    fn end(&self,renderer: R) -> R;
+    fn start(&self, renderer: R, dim: &Vec2<f32>, pos: &Vec2<f32>) -> R;
+    fn end(&self, renderer: R) -> R;
 }
 
 pub struct Clip;
 
 impl<R: Renderer> Child<R> for Clip {
-    fn start(&self,mut renderer: R, dim: &Vec2<f32>, pos: &Vec2<f32>) -> R {
+    fn start(&self, mut renderer: R, dim: &Vec2<f32>, pos: &Vec2<f32>) -> R {
         renderer.start_clip(dim, pos);
         renderer
     }
 
-    fn end(&self,mut renderer: R) -> R {
+    fn end(&self, mut renderer: R) -> R {
         renderer.end_clip();
         renderer
     }
@@ -686,7 +605,7 @@ pub trait On<'skip, R: Renderer, W: Widget<'skip, R>> {
     type FnOut;
     type Arg: 'skip;
     fn call(f: impl FnMut(Self::Arg) -> Self::FnOut, widget: W, cursor_pos: Vec2<f32>) -> W;
-} 
+}
 pub struct Hover;
 
 impl<'skip, R: Renderer, W: Widget<'skip, R> + 'skip> On<'skip, R, W> for Hover {
@@ -703,8 +622,6 @@ impl<'skip, R: Renderer, W: Widget<'skip, R> + 'skip> On<'skip, R, W> for Hover 
 pub struct Mouses;
 
 impl<'skip, R: Renderer, W: Widget<'skip, R>> On<'skip, R, W> for Mouses {
-    //type Out = W;
-    //type Arg = &(Mouse, State);
     type FnOut = ();
 
     type Arg = &'skip (Mouse, State);
@@ -724,8 +641,7 @@ pub struct Plain<Color: Into<crate::Color> = ()> {
     pub rad: f32,
 }
 
-pub struct Image<'skip, R: Renderer, Color: Into<crate::Color> = ()> {
-    //pub img_id: ImageId,
+pub struct Image<'skip, R: Renderer, Color: Into<crate::Color> = ()> { 
     pub src: &'skip R::Image,
     pub tint: Color,
 }
@@ -864,13 +780,15 @@ pub trait Renderer {
     fn render_circle(&mut self, circle: &CircleW, color: Color);
     fn render_paragraph(
         &mut self,
-        text_w: &mut TextW,
+        text_w: &TextW,
         text: &str,
         paragraph: &mut Option<Self::Paragraph>,
         font: &Self::Font,
         color: Color,
     );
-    fn render_text(&mut self, text_w: &mut TextW, text: &str, font: &Self::Font, color: Color);
+    fn render_text(&mut self, text_w: &TextW, text: &str, font: &Self::Font, color: Color);
+    fn measure_text(&mut self, text_w: &mut TextW, text: &str, font: &Self::Font);
+    fn measure_paragraph(&mut self, text_w: &mut TextW, text: &str, paragraph: &mut Option<Self::Paragraph>, font: &Self::Font);
     //fn text_size<'skip>(&mut self, text_w: &TextW<'skip>, text: &str) -> Vec2<f32>;
     //fn paragraph_size<'skip>(&mut self, text_w: &TextW<'skip>, text: &str, paragraph: &mut Option<Self::Paragraph>) -> Vec2<f32>;
     fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>);
@@ -888,11 +806,6 @@ pub trait Proc<'skip, R: Renderer> {
     type Widget: Widget<'skip, R>;
     type Arg;
     fn consume(self, widget: Self::Widget, argv: Self::Arg) -> Self::Widget;
-}
-
-pub enum Cursor {
-    Default,
-    Pointer,
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R> for Circle<R> {
@@ -917,74 +830,18 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Circle<R> {
     }
 }
 
-impl<'skip, R: Renderer> Widget<'skip, R> for Horizontal<R> {
-    #[inline]
-    fn renderer(self) -> R {
-        self.renderer
-    }
-
+impl<'skip, R: Renderer, L: LayoutRule> Widget<'skip, R> for Div<L, R> {
     #[inline]
     fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self {
-        //let p = pos.into();
-        Self {
-            layout: Layout {
-                offset: ().into(),
-                pos: pos.into(),
-                size: renderer.get_parent().0,
-                gap: 0.0,
-            },
-            renderer,
-        }
-    }
-
-    #[inline]
-    fn size(&self) -> Vec2<f32> {
-        (&self.layout.size).into()
-    }
-
-    fn iter_mouse<'a, F: FnMut(&'a (Mouse, State))>(&self, f: F) {
-        self.renderer.iter_mouse(f);
-    }
-}
-
-impl<'skip, R: Renderer> Widget<'skip, R> for Vertical<R> {
-    
-    #[inline]
-    fn renderer(self) -> R {
-        self.renderer
-    }
-    #[inline]
-    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self {
-        //let p = pos.into();
-        Self {
-            layout: Layout {
-                offset: ().into(),
-                pos: pos.into(),
-                size: renderer.get_parent().0,
-                gap: 0.0,
-            },
-            renderer,
-        }
-    }
-    #[inline]
-    fn size(&self) -> Vec2<f32> {
-        (&self.layout.size).into()
-    }
-
-    fn iter_mouse<'a, F: FnMut(&'a (Mouse, State))>(&self, f: F) {
-        self.renderer.iter_mouse(f);
-    }
-}
-
-impl<'skip, R: Renderer> Widget<'skip, R> for Div<R> {
-    
-    #[inline]
-    fn inherit<PO: Into<Vec2<f32>>>( pos: PO, renderer: R) -> Self {
         let widget: DivW = DivW {
             size: ().into(),
             pos: pos.into(),
         };
-        Self { widget, renderer }
+        Self {
+            widget,
+            layout: L::default(),
+            renderer,
+        }
     }
 
     #[inline]
@@ -1004,10 +861,10 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Div<R> {
 impl<'skip, TD: TextD<'skip, R>, R: Renderer> Widget<'skip, R> for Text<'skip, TD, R>
 where
     R::Font: 'skip,
-{ 
+{
     #[inline]
     fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self {
-       Self {
+        Self {
             widget: TextW {
                 dim: ().into(),
                 pos: pos.into(),
@@ -1053,7 +910,7 @@ pub enum Key {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Vec2<T> {
     pub x: T,
     pub y: T,
@@ -1065,7 +922,6 @@ impl<T> Vec2<T> {
         Self { x, y }
     }
 }
-
 
 impl<'skip, R: Renderer, P: Proc<'skip, R>> From<(P, P::Arg)> for ProcArg<'skip, R, P> {
     fn from(value: (P, P::Arg)) -> Self {
