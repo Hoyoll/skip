@@ -37,13 +37,14 @@ pub struct Text<'skip, TD: TextD<'skip, R>, R: Renderer> {
     content: Option<(TD::Text, &'skip R::Font)>,
     renderer: R,
 }
+
 pub struct TextW {
     pub dim: Vec2<f32>,
     pub pos: Vec2<f32>,
     pub size: f32,
 }
 
-trait TextD<'skip, R: Renderer> {
+pub trait TextD<'skip, R: Renderer> {
     type Text: 'skip;
     fn measure(renderer: &mut R, text_w: &mut TextW, text: Self::Text, font: &R::Font) -> Self::Text;
 
@@ -106,7 +107,7 @@ pub struct Div<L: LayoutRule, R: Renderer> {
     renderer: R,
 }
 
-trait LayoutRule: Default {
+pub trait LayoutRule: Default {
     fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
         &mut self,
         renderer: R,
@@ -145,7 +146,7 @@ impl LayoutRule for () {
 }
 
 #[derive(Default)]
-struct Vertical {
+pub struct Vertical {
     offset: Vec2<f32>,
     gap: f32,
 }
@@ -292,7 +293,7 @@ trait Size<R: Renderer> {
     fn get(self, renderer: &R) -> Vec2<f32>;
 }
 
-struct Screen;
+pub struct Screen;
 
 impl<R: Renderer> Size<R> for Screen {
     fn get(self, renderer: &R) -> Vec2<f32> {
@@ -300,7 +301,7 @@ impl<R: Renderer> Size<R> for Screen {
     }
 }
 
-struct Inherit;
+pub struct Inherit;
 
 impl<R: Renderer> Size<R> for Inherit {
     fn get(self, renderer: &R) -> Vec2<f32> {
@@ -439,9 +440,7 @@ impl<'skip, R: Renderer, L: LayoutRule> Div<L, R> {
 impl<'skip, TD: TextD<'skip, R>, R: Renderer> Text<'skip, TD, R> {
     #[inline]
     pub fn content(mut self, (text, font): (TD::Text, &'skip R::Font)) -> Self {
-        let t = TD::measure(&mut self.renderer, &mut self.widget, text, font);
-        
-        self.content = Some((t, font));
+        self.content = Some((text, font));
         self
     }
     
@@ -469,6 +468,10 @@ impl<'skip, TD: TextD<'skip, R>, R: Renderer> Text<'skip, TD, R> {
     #[inline]
     pub fn size(mut self, size: f32) -> Self {
         self.widget.size = size;
+        if let Some((text, ref font)) = self.content {
+            let t = TD::measure(&mut self.renderer, &mut self.widget, text, font);
+            self.content = Some((t, font));
+        } 
         self
     }
 
