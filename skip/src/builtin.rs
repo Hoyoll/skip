@@ -8,8 +8,14 @@ pub(crate) struct ProcArg<'skip, R: Renderer, P: Proc<'skip, R>> {
     pub ph: PhantomData<&'skip ()>,
 }
 
+pub(crate) trait FromRef {
+    fn from(&self) -> Self;
+}
+
 pub(crate) trait Widget<'skip, R: Renderer> {
-    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self;
+    type Constructor;
+    //type RenderArg;
+    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, constructor: impl AsRef<Self::Constructor>, renderer: R) -> Self;
     fn renderer(self) -> R;
     fn size(&self) -> Vec2<f32>;
     //fn mouse_state(&self) -> &Vec<(Mouse, State)>;

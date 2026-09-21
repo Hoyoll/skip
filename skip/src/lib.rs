@@ -32,22 +32,36 @@ pub struct CircleW {
 //cursor_height = metrics.line_height; span
 
 
-pub struct Text<'skip, TD: TextD<'skip, R>, R: Renderer> {
+pub struct Text<'skip, R: Renderer> {
     widget: TextW,
-    content: Option<(TD::Text, &'skip R::Font)>,
+    font: &'skip R::Font,
+    //content: &'skip TextContent<'skip, R, TD>,
+    //content: Option<(TD::Text, &'skip R::Font)>,
     renderer: R,
+}
+
+pub struct TextContent<'skip, R: Renderer, TD: TextD<'skip, R>> {
+    text: TD::Text,
+    font: &'skip R::Font,
+}
+
+impl<'skip, R: Renderer, TD: TextD<'skip, R>> TextContent<'skip, R, TD> {
+    fn measure(mut self, renderer: &mut R, text_w: &mut TextW) -> Self {
+        self.text = TD::measure(renderer, text_w, self.text, self.font);
+        self
+    }
 }
 
 pub struct TextW {
     pub dim: Vec2<f32>,
     pub pos: Vec2<f32>,
-    pub size: f32,
+    //pub size: f32,
 }
 
 pub trait TextD<'skip, R: Renderer> {
-    type Text: 'skip;
+    type Text;
     fn measure(renderer: &mut R, text_w: &mut TextW, text: Self::Text, font: &R::Font) -> Self::Text;
-
+    //fn clone(text: Self::Text) -> Self::Text;
     fn display(
         renderer: &mut R,
         widget: &TextW,
@@ -59,8 +73,8 @@ pub trait TextD<'skip, R: Renderer> {
 
 pub struct Wrap;
 pub struct Paragraph<R: Renderer> {
-    text: String,
-    cached_paragraph: Option<R::Paragraph>,
+    pub text: String,
+    pub cached_paragraph: Option<R::Paragraph>,
 }
 impl<'skip, R: Renderer + 'skip> TextD<'skip, R> for Wrap {
     type Text = &'skip mut Paragraph<R>;
@@ -89,6 +103,7 @@ impl<'skip, R: Renderer> TextD<'skip, R> for Linear {
         renderer.measure_text(text_w, text, font);
         text
     }
+
     fn display(
         renderer: &mut R,
         widget: &TextW,
@@ -111,12 +126,14 @@ pub trait LayoutRule: Default {
     fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         parent: &Vec2<f32>,
         f: impl FnOnce(W) -> W,
     ) -> R;
     fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         parent: &Vec2<f32>,
         items: impl Into<IterArg<Iter>>,
         f: impl FnMut(W, Iter::Item) -> W,
@@ -127,16 +144,18 @@ impl LayoutRule for () {
     fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         parent: &Vec2<f32>,
         f: impl FnOnce(W) -> W,
     ) -> R {
-        let w = f(W::inherit(parent, renderer));
+        let w = f(W::inherit(parent,arg, renderer));
         w.renderer()
     }
 
     fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         _parent: &Vec2<f32>,
         _items: impl Into<IterArg<Iter>>,
         _f: impl FnMut(W, Iter::Item) -> W,
@@ -155,10 +174,11 @@ impl LayoutRule for Vertical {
     fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         parent: &Vec2<f32>,
         f: impl FnOnce(W) -> W,
     ) -> R {
-        let w = f(W::inherit((parent.x, parent.y + self.offset.y), renderer));
+        let w = f(W::inherit((parent.x, parent.y + self.offset.y), arg,renderer));
         let size = w.size();
         self.offset.y += size.y;
         self.offset.y += self.gap;
@@ -168,6 +188,7 @@ impl LayoutRule for Vertical {
     fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         parent: &Vec2<f32>,
         items: impl Into<IterArg<Iter>>,
         mut f: impl FnMut(W, Iter::Item) -> W,
@@ -179,7 +200,7 @@ impl LayoutRule for Vertical {
             None => {
                 for item in iter_arg.items.by_ref() {
                     w = f(
-                        W::inherit((parent.x, parent.y + self.offset.y), renderer),
+                        W::inherit((parent.x, parent.y + self.offset.y),&arg, renderer),
                         item,
                     );
                     let size = w.size();
@@ -195,6 +216,7 @@ impl LayoutRule for Vertical {
                     w = f(
                         W::inherit(
                             (parent.x + self.offset.x, parent.y + self.offset.y),
+                            &arg,
                             renderer,
                         ),
                         item,
@@ -227,10 +249,11 @@ impl LayoutRule for Horizontal {
     fn layout<'skip, W: Widget<'skip, R>, R: Renderer>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         parent: &Vec2<f32>,
         mut f: impl FnOnce(W) -> W,
     ) -> R {
-        let w = f(W::inherit((parent.x + self.offset.x, parent.y), renderer));
+        let w = f(W::inherit((parent.x + self.offset.x, parent.y),arg, renderer));
         let size = w.size();
         self.offset.x += size.x;
         self.offset.x += self.gap;
@@ -240,6 +263,7 @@ impl LayoutRule for Horizontal {
     fn iter<'skip, R: Renderer, Iter: Iterator, W: Widget<'skip, R>>(
         &mut self,
         renderer: R,
+        arg: impl AsRef<W::Constructor>,
         parent: &Vec2<f32>,
         items: impl Into<IterArg<Iter>>,
         mut f: impl FnMut(W, Iter::Item) -> W,
@@ -251,7 +275,7 @@ impl LayoutRule for Horizontal {
             None => {
                 for item in iter_arg.items.by_ref() {
                     w = f(
-                        W::inherit((parent.x + self.offset.x, parent.y), renderer),
+                        W::inherit((parent.x + self.offset.x, parent.y),&arg, renderer),
                         item,
                     );
                     let size = w.size();
@@ -267,6 +291,7 @@ impl LayoutRule for Horizontal {
                     w = f(
                         W::inherit(
                             (parent.x + self.offset.x, parent.y + self.offset.y),
+                            &arg,
                             renderer,
                         ),
                         item,
@@ -400,6 +425,7 @@ impl<'skip, R: Renderer, L: LayoutRule> Div<L, R> {
     #[inline]
     pub fn child<W: Widget<'skip, R>>(
         mut self,
+        arg: impl Into<W::Constructor>,
         f: impl FnOnce(W) -> W,
     ) -> Self {
         self.renderer
@@ -812,10 +838,12 @@ pub trait Proc<'skip, R: Renderer> {
 }
 
 impl<'skip, R: Renderer> Widget<'skip, R> for Circle<R> {
-    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self {
+    type Constructor = f32;
+    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, radius: impl AsRef<Self::Constructor>, renderer: R) -> Self {
+        let radius = radius.as_ref();
         Self {
             widget: CircleW {
-                radius: 0.0,
+                radius: *radius,
                 pos: pos.into(),
             },
             renderer,
@@ -834,10 +862,11 @@ impl<'skip, R: Renderer> Widget<'skip, R> for Circle<R> {
 }
 
 impl<'skip, R: Renderer, L: LayoutRule> Widget<'skip, R> for Div<L, R> {
+    type Constructor = Vec2<f32>;
     #[inline]
-    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self {
+    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, constructor: impl AsRef<Self::Constructor>, renderer: R) -> Self {
         let widget: DivW = DivW {
-            size: ().into(),
+            size: constructor.as_ref().into(),
             pos: pos.into(),
         };
         Self {
@@ -861,19 +890,23 @@ impl<'skip, R: Renderer, L: LayoutRule> Widget<'skip, R> for Div<L, R> {
     }
 }
 
-impl<'skip, TD: TextD<'skip, R>, R: Renderer> Widget<'skip, R> for Text<'skip, TD, R>
+impl<'skip, R: Renderer> Widget<'skip, R> for Text<'skip, R>
 where
     R::Font: 'skip,
 {
+    type Constructor = &'skip R::Font;
     #[inline]
-    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, renderer: R) -> Self {
-        Self {
-            widget: TextW {
+    fn inherit<PO: Into<Vec2<f32>>>(pos: PO, font: impl AsRef<Self::Constructor>, mut renderer: R) -> Self {
+        let widget = TextW {
                 dim: ().into(),
                 pos: pos.into(),
-                size: 10.0,
-            },
-            content: None,
+                //size: 10.0,
+            };
+        //let text = text.measure(&mut renderer, &mut widget);
+        //let content = TD::measure(&mut renderer, &mut widget, text, font);
+        Self {
+            widget,
+            font: font.as_ref(),
             renderer,
         }
     }
