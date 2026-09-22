@@ -1,0 +1,9 @@
+title = "fix skip-skia"
+
+description = """
+Like the name, make skip-skia crate up to date with with current api of skip
+"""
+
+references = [
+	"skip-skia/src/lib.rs"
+]
