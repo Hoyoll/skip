@@ -17,17 +17,17 @@ impl<
 > Proc<'skip, R> for Border<Color, Thickness, Offset>
 {
     type Arg = ();
-    type Widget = Div<(), R>;
+    type Widget = Div<R>;
     fn consume(self, widget: Self::Widget, _argv: Self::Arg) -> Self::Widget {
         let large = self.1.into();
         let mut pad = self.2.into();
         pad.x -= large.x;
         pad.y -= large.y;
-        widget.child(|div: Div<(),_>| {
+        widget.child(large, |div: Div<_>| {
             div.size::<Set>(Inherit)
                 .size::<Inc>((large.x * 2.0, large.y * 2.0))
                 .position::<Inc>(pad)
-                .render::<Plain<_>>(self.0)
+                .render::<Plain>((self.0.into(), 0.0))
         })
     }
 }
@@ -55,19 +55,19 @@ impl TextBox {
 }
 
 impl<'skip, R: Renderer + 'skip> Proc<'skip, R> for &'skip mut TextBox {
-    type Widget = Div<Horizontal,R>;
+    type Widget = Div<R, Horizontal>;
     type Arg = (&'skip R::Font, f32, Color);
     fn consume(self, widget: Self::Widget, (font, size, color): Self::Arg) -> Self::Widget {
         widget
-            .child(|text: Text<Linear, _>| {
-                text.content((&self.text[0..self.insert_idx], font))
-                    .size(size)
+            .child(font,|text: Text<Linear, _>| {
+                text.content((&self.text[0..self.insert_idx]))
+                    //.size(size)
                     .render(&color)
             })
-            .child(|cursor: Div<(),_>| cursor.size::<Set>((1.0, size)).render::<Plain<_>>(&color))
-            .child(|text: Text<Linear, _>| {
-                text.content((&self.text[self.insert_idx..self.text.len()], font))
-                    .size(size)
+            .child((1.0, size),|cursor: Div<_>| cursor.render::<Plain>((color, 0.0)))
+            .child(font,|text: Text<Linear, _>| {
+                text.content(&self.text[self.insert_idx..self.text.len()])
+                    //.size(size)
                     .render(&color)
             })
     }

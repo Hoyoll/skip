@@ -1,11 +1,14 @@
 use std::{
     sync::mpsc::{Receiver, Sender, channel},
-    thread::{self, JoinHandle}, time::Duration,
+    thread::{self, JoinHandle},
+    time::Duration,
 };
 
 use reqwest::blocking::Client;
 use serde_json::Value;
-use skip::{Clip, Div, Font, Leak, Linear, Mouse, Mouses, Plain, Proc, Set, State, Text, Vertical, Wrap};
+use skip::{
+    Clip, Div, Font, Leak, Linear, Mouse, Mouses, Plain, Proc, Set, State, Text, Vertical, Wrap,
+};
 use skip_skia::{AppController, Canvas, Event, run_app};
 use winit::{
     event_loop::EventLoopProxy,
@@ -18,11 +21,11 @@ mod asset {
 }
 
 mod color {
-    pub const BG: (u8, u8, u8,u8) = (16, 20, 28, 255);
+    pub const BG: (u8, u8, u8, u8) = (16, 20, 28, 255);
 }
 
 use serde::{Deserialize, Serialize};
-#[derive(Debug,Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum EntryType {
     #[serde(rename = "dir")]
     Directory,
@@ -76,14 +79,17 @@ impl App {
                 list: None,
                 sender: s,
             },
-            fonts: Fonts { roboto: 0, fira_code: 1 },
+            fonts: Fonts {
+                roboto: 0,
+                fira_code: 1,
+            },
             proxy: None,
             temp: Some(r),
         }
     }
 
-    fn build_client(&mut self, client: Client) { 
-        let r = self.temp.take().unwrap(); 
+    fn build_client(&mut self, client: Client) {
+        let r = self.temp.take().unwrap();
         let proxy = self.proxy.clone().unwrap();
         let handle = thread::spawn(move || {
             for url in r.iter() {
@@ -109,17 +115,17 @@ impl AppController<Music> for App {
         mut layout: skip::Horizontal<skip_skia::Canvas>,
     ) -> Option<std::time::Duration> {
         let canvas_size = layout.canvas_size();
-        layout.add(|background:Div<_>| {
+        layout.add(|background: Div<_>| {
             background
-            .size::<Set>(&canvas_size)
-            .render::<Plain<_>>(color::BG)
-            .child::<Div<_>, Leak>(|list| {
-                if let Some(proxy) = &self.proxy {
-                    list.proc((&mut self.entry_list, (proxy, self.fonts.fira_code)))
-                } else {
-                    list
-                }
-            })
+                .size::<Set>(&canvas_size)
+                .render::<Plain>((color::BG.into(), 0.0))
+                .child((0.0, 0.0), |list| {
+                    if let Some(proxy) = &self.proxy {
+                        list.proc((&mut self.entry_list, (proxy, self.fonts.fira_code)))
+                    } else {
+                        list
+                    }
+                })
         });
         Some(Duration::from_millis(16))
     }
@@ -137,15 +143,17 @@ impl AppController<Music> for App {
         match client {
             Ok(c) => {
                 self.build_client(c);
-                self.entry_list.sender.send("https://api.github.com/repos/Hoyoll/musics/contents".into());
+                self.entry_list
+                    .sender
+                    .send("https://api.github.com/repos/Hoyoll/musics/contents".into());
             }
             Err(_) => {
                 context.exit();
             }
         }
 
-//        self.fonts.roboto = context.new_font(&asset::ROBOTO, Some(0)).unwrap();
-//        self.fonts.fira_code = context.new_font(&asset::FIRA_CODE, Some(1)).unwrap();
+        //        self.fonts.roboto = context.new_font(&asset::ROBOTO, Some(0)).unwrap();
+        //        self.fonts.fira_code = context.new_font(&asset::FIRA_CODE, Some(1)).unwrap();
 
         let attr = WindowAttributes::default()
             .with_resizable(false)
@@ -183,45 +191,36 @@ impl<'skip> Proc<'skip, Canvas<'skip>> for &mut EntryList {
     fn consume(self, widget: Self::Widget, (proxy, font): Self::Arg) -> Self::Widget {
         widget.child::<Vertical<_>, Clip>(|vertical| match &self.list {
             None => vertical, //idk, currently just zonk XD
-            Some(list) => vertical
-                .gap(5.0)
-                .iter(list.iter().enumerate(), |text: Text<_>, (idx, entry)| {
-                let s = String::new();
-                text
-                //.font_id(font)
-                //.size(40.0)
-
-                .render::<Linear>("")
-                .expr((&entry.download_url, |text, kind| {
-                    match kind {
-                        None => {
-                            text
-                            .on::<Mouses>(|mouse| {
-                                match mouse {
-                                    (Mouse::Left, State::Released) => {
-                                        println!("released!");
-                                        self.sender.send(entry.url.clone());
-                                    }
-                                    _ => ()
-                                }
-                            })
-                            .render((255, 255, 255, 255))
-                        }
-                        Some(_) => {
-                            text
-                            .on::<Mouses>(|mouse| {
-                                match mouse {
-                                    (Mouse::Left, State::Released) => {
-                                        proxy.send_event(Music::Play(idx - 1, list.clone()));
-                                    }
-                                    _ => ()
-                                }
-                            })
-                            .render((255, 0, 255, 255))
-                        }
-                    }
-                }))
-            }),
+            Some(list) => {
+                vertical
+                    .gap(5.0)
+                    .iter(list.iter().enumerate(), |text: Text<_>, (idx, entry)| {
+                        let s = String::new();
+                        text
+                            //.font_id(font)
+                            //.size(40.0)
+                            .render::<Linear>("")
+                            .expr((&entry.download_url, |text, kind| match kind {
+                                None => text
+                                    .on::<Mouses>(|mouse| match mouse {
+                                        (Mouse::Left, State::Released) => {
+                                            println!("released!");
+                                            self.sender.send(entry.url.clone());
+                                        }
+                                        _ => (),
+                                    })
+                                    .render((255, 255, 255, 255)),
+                                Some(_) => text
+                                    .on::<Mouses>(|mouse| match mouse {
+                                        (Mouse::Left, State::Released) => {
+                                            proxy.send_event(Music::Play(idx - 1, list.clone()));
+                                        }
+                                        _ => (),
+                                    })
+                                    .render((255, 0, 255, 255)),
+                            }))
+                    })
+            }
         })
     }
 }

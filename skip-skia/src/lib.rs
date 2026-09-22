@@ -39,7 +39,7 @@ pub fn run_app<App: AppController<Event>, Event: 'static>(app: App) {
 struct Runner {
     window_container: WindowContainer,
     event_loop: winit::event_loop::EventLoop,
-    res: Res
+    res: Res,
 }
 
 impl Runner {
@@ -48,20 +48,28 @@ impl Runner {
     }
 }
 
-fn prepare<App: crate::App>(assets: &AssetManager) -> (winit::event_loop::EventLoopProxy<Request<App::CanvasIdentifier, App::Event>>, Runner) {    
-    let event_loop = winit::event_loop::EventLoop::with_user_event().build().unwrap();
+fn prepare<App: crate::App>(
+    assets: &AssetManager,
+) -> (
+    winit::event_loop::EventLoopProxy<Request<App::CanvasIdentifier, App::Event>>,
+    Runner,
+) {
+    let event_loop = winit::event_loop::EventLoop::with_user_event()
+        .build()
+        .unwrap();
     let proxy = event_loop.create_proxy();
     let mut font_collection = skia_safe::textlayout::FontCollection::new();
     font_collection.set_asset_font_manager(Some(assets.font_loader));
     let runner = Runner {
         window_container: WindowContainer::new(),
         event_loop,
-        res: Res { 
-            current_focus: winit::window::WindowId::dummy(), 
-            on: Vec::new(), 
-            mouse_pos: ().into(), 
-            font_collection, 
-            paint: skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.0), None) }
+        res: Res {
+            current_focus: winit::window::WindowId::dummy(),
+            on: Vec::new(),
+            mouse_pos: ().into(),
+            font_collection,
+            paint: skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.0), None),
+        },
     };
 
     (proxy, runner)
@@ -75,7 +83,6 @@ struct Res {
     paint: skia_safe::Paint,
 }
 
-
 type WindowContainer = HashMap<winit::window::WindowId, App::CanvasIdentifier>;
 
 enum Request<T: Eq + PartialEq, E: 'static> {
@@ -87,7 +94,7 @@ enum Request<T: Eq + PartialEq, E: 'static> {
 trait App {
     type Event: 'static;
     type CanvasIdentifier: Eq + PartialEq;
- 
+
     fn on_user_event(&mut self, event: Self::Event);
     fn on_draw(&mut self, on: &Self::CanvasIdentifier, res: &Res) -> Option<Duration>;
     fn on_key(&mut self, on: &Self::CanvasIdentifier, key: (skip::Key, skip::State)) {}
@@ -100,13 +107,12 @@ struct Canvas {
     dr_context: skia_safe::gpu::DirectContext,
     skia_context: glutin::context::PossiblyCurrentContext,
     fb_info: skia_safe::gpu::gl::FramebufferInfo,
-    gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>, 
+    gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
     next_redraw: Option<Instant>,
 }
 
 impl Canvas {
-    fn start(&mut self, res: &Res) -> impl FnOnce(skip::Horizontal<Brush>) { 
-    }
+    fn start(&mut self, res: &Res) -> impl FnOnce(skip::Horizontal<Brush>) {}
 }
 
 struct Brush {
@@ -118,7 +124,7 @@ struct Brush {
     paragrah_style: &'skip mut skia_safe::textlayout::ParagraphStyle,
     window_dim: skip::Vec2<f32>,
     p_pos: Vec2<f32>,
-    p_dim: Vec2<f32>,   
+    p_dim: Vec2<f32>,
 }
 
 impl skip::Renderer for Brush {
@@ -126,7 +132,14 @@ impl skip::Renderer for Brush {
     type Image = skia_safe::Image;
     type Font = Font;
 
-    fn render_paragraph(&mut self, text_w: &mut skip::TextW, text: &str, paragraph: &mut Option<Self::Paragraph>, font: &Self::Font, color: skip::Color) {
+    fn render_paragraph(
+        &mut self,
+        text_w: &mut skip::TextW,
+        text: &str,
+        paragraph: &mut Option<Self::Paragraph>,
+        font: &Self::Font,
+        color: skip::Color,
+    ) {
     }
 }
 
@@ -170,571 +183,574 @@ pub struct Font {
     tf: skia_safe::Typeface,
 }
 mod deprecated {
-
-pub trait AppController<T> {
-    fn bootstrap<'skip>(&mut self, context: Context<'skip>, event: EventLoopProxy<T>);
-    fn on_user_event<'skip>(&mut self, user_event: T, context: Context<'skip>) {}
-    //fn share_resource(&mut self) -> &mut Shared;
-    fn on_draw(
-        &mut self,
-        on_window: winit::window::WindowId,
-        layout: skip::Horizontal<Canvas>,
-    ) -> Option<Duration>;
-    fn on_key(&mut self, _on_window: winit::window::WindowId, _key: (skip::Key, skip::State)) {}
-    fn get_asset(&self) -> &AssetManager;
-}
-pub enum Redraw {
-    FocusOnly,
-    Always,
-}
-
-struct Window {
-    window: winit::window::Window,
-    surface: skia_safe::Surface,
-    dr_context: skia_safe::gpu::DirectContext,
-    skia_context: glutin::context::PossiblyCurrentContext,
-    fb_info: skia_safe::gpu::gl::FramebufferInfo,
-    gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
-    //draw_fn: DrawFn<Shared, T>,
-    //key_fn: Option<KeyFn<Shared, T>>,
-    next_redraw: Option<Instant>,
-    redraw_policy: Redraw,
-    //focused: bool,
-}
-
-pub struct Canvas<'skip> {
-    on: &'skip Vec<(Mouse, State)>,
-    mouse_pos: &'skip skip::Vec2<f32>,
-    //key: &'skip Vec<skip::Key>,
-    canvas: &'skip skia_safe::Canvas,
-    paint: &'skip mut skia_safe::Paint,
-    fonts: &'skip mut Vec<skia_safe::Font>,
-    images: &'skip Vec<skia_safe::Image>,
-    window: &'skip mut winit::window::Window,
-    //text_cache: &'skip mut Vec<TextCache<'skip>>,
-    //cache_index: usize,
-    text_style: &'skip mut skia_safe::textlayout::TextStyle,
-    font_collection: &'skip skia_safe::textlayout::FontCollection,
-    paragrah_style: &'skip mut skia_safe::textlayout::ParagraphStyle,
-    window_dim: skip::Vec2<f32>,
-    p_pos: Vec2<f32>,
-    p_dim: Vec2<f32>,
-}
+    use skip::Vec2;
 
 
-
-impl<'a> skip::Renderer for Canvas<'a> {
-    type Paragraph = TextCache;
-    type Image = skia_safe::Image;
-    type Font = Font;
-
-    fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, mut f: F) {
-        for key in self.on {
-            f(key)
-        }
+    pub trait AppController<T> {
+        fn bootstrap<'skip>(&mut self, context: Context<'skip>, event: EventLoopProxy<T>);
+        fn on_user_event<'skip>(&mut self, user_event: T, context: Context<'skip>) {}
+        //fn share_resource(&mut self) -> &mut Shared;
+        fn on_draw(
+            &mut self,
+            on_window: winit::window::WindowId,
+            layout: skip::Horizontal<Canvas>,
+        ) -> Option<Duration>;
+        fn on_key(&mut self, _on_window: winit::window::WindowId, _key: (skip::Key, skip::State)) {}
+        fn get_asset(&self) -> &AssetManager;
+    }
+    pub enum Redraw {
+        FocusOnly,
+        Always,
     }
 
-    fn render_paragraph(
-        &mut self,
-        text_w: &mut skip::TextW,
-        text: &str,
-        paragraph: &mut Option<Self::Paragraph>,
-        font: &Self::Font,
-        color: skip::Color,
-    ) {
-        match paragraph {
-            None => {}
-            Some(cache) => {}
-        }
-
-        if let Some(p) = paragraph {
-            if p.font != font.tf.unique_id() {}
-
-            if p.color != color {}
-
-            if p.width != self.p_dim.x {}
-
-            if p.size != font.font.size() {}
-        }
-    }
-
-    fn render_text(
-        &mut self,
-        text_w: &mut skip::TextW,
-        text: &str,
-        font: &Self::Font,
-        color: skip::Color,
-    ) {
-        self.text_style.set_font_size(text.size);
-        self.text_style.set_font_families(&[text.font]);
-        self.paragrah_style.set_text_style(self.text_style);
-        let prov = skia_safe::textlayout::TypefaceFontProvider::new();
-        //prov.register_typeface(typeface, alias);
-
-        self.font_collection.set_asset_font_manager(prov);
-        //prov.register_typeface(typeface, alias)
-        let mut builder = skia_safe::textlayout::ParagraphBuilder::new(
-            self.paragrah_style,
-            self.font_collection.clone(),
-        );
-        builder.add_text(text.text);
-        //self.font_collection.set_asset_font_manager(font_manager);
-        let paragraph = builder.build();
-
-        let size = Vec2::new(
-            paragraph.max_width() as f32,
-            paragraph.longest_line() as f32,
-        );
-    }
-    fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(
-        &mut self,
-        dim: Dim,
-        pos: Pos,
-    ) {
-        self.p_pos = pos.into();
-        self.p_dim = dim.into();
-    }
-
-    fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
-        (
-            (self.p_dim.x, self.p_dim.y).into(),
-            (self.p_pos.x, self.p_pos.y).into(),
-        )
-    }
-
-    fn canvas_size(&mut self) -> skip::Vec2<f32> {
-        let size = self.window.inner_size();
-        (size.width as f32, size.height as f32).into()
-    }
-
-    fn render_div(&mut self, div: &skip::DivW, color: skip::Color, radius: f32) {
-        let right = div.pos.x + div.size.x;
-        let bottom = div.pos.y + div.size.y;
-
-        if right <= 0.0
-            || bottom <= 0.0
-            || div.pos.x >= self.window_dim.x
-            || div.pos.y >= self.window_dim.y
-        {
-            //println!("skipped!");
-            return;
-        }
-        //dbg!(div);
-        //println!("draw!");
-        self.paint.set_argb(color.a, color.r, color.g, color.b);
-        self.canvas.draw_round_rect(
-            skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.size.x, div.size.y),
-            radius,
-            radius,
-            self.paint,
-        );
-    }
-    fn render_circle(&mut self, circle: &skip::CircleW, color: skip::Color) {
-        self.paint.set_argb(color.a, color.r, color.g, color.b);
-        self.canvas
-            .draw_circle((circle.pos.x, circle.pos.y), circle.radius, self.paint);
-    }
-
-    fn render_img(&mut self, img: &skip::DivW, tint: skip::Color, image_id: skip::ImageId) {
-        let right = img.pos.x + img.size.x;
-        let bottom = img.pos.y + img.size.y;
-
-        if right <= 0.0
-            || bottom <= 0.0
-            || img.pos.x >= self.window_dim.x
-            || img.pos.y >= self.window_dim.y
-        {
-            return;
-        }
-        match self.images.get(image_id) {
-            Some(image) => {
-                self.paint.set_argb(tint.a, tint.r, tint.g, tint.b);
-                self.canvas.draw_image_rect(
-                    image,
-                    None,
-                    skia_safe::Rect::from_xywh(img.pos.x, img.pos.y, img.size.x, img.size.y),
-                    self.paint,
-                );
-            }
-            None => (),
-        }
-    }
-
-    fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>) {
-        self.canvas.save();
-        let rect = skia_safe::Rect::from_xywh(pos.x, pos.y, dim.x, dim.y);
-        let mut path = skia_safe::Path::rect(&rect, None);
-        self.canvas.clip_path(&path, None, Some(true));
-    }
-    fn end_clip(&mut self) {
-        self.canvas.restore();
-    }
-
-    fn mouse_pos(&mut self) -> skip::Vec2<f32> {
-        (self.mouse_pos).into()
-    }
-
-    fn change_cursor(&mut self, cursor: skip::Cursor) {
-        use winit::window::Cursor::*;
-        use winit::window::CursorIcon::*;
-        let cursor = match cursor {
-            skip::Cursor::Default => Icon(Default),
-            skip::Cursor::Pointer => Icon(Pointer),
-        };
-        self.window.set_cursor(cursor);
-    }
-}
-
-struct WinitRenderer<T: 'static, A: AppController<T>> {
-    windows: HashMap<winit::window::WindowId, Window>,
-    on: Vec<(Mouse, State)>,
-    //key: Vec<skip::Key>,
-    mouse_pos: skip::Vec2<f32>,
-    current_focus: winit::window::WindowId,
-    proxy: EventLoopProxy<T>,
-    app: A,
-    paint: skia_safe::Paint,
-    fonts: Vec<skia_safe::Font>,
-    font_mgr: skia_safe::FontMgr,
-    images: Vec<skia_safe::Image>,
-}
-
-pub struct Context<'skip> {
-    windows: &'skip mut HashMap<winit::window::WindowId, Window>,
-    event_loop: &'skip winit::event_loop::ActiveEventLoop,
-    fonts: &'skip mut Vec<skia_safe::Font>,
-    font_mgr: &'skip mut skia_safe::FontMgr,
-    images: &'skip mut Vec<skia_safe::Image>,
-}
-
-impl<'skip> Context<'skip> {
-    pub fn new_window(
-        &mut self,
-        attr: winit::window::WindowAttributes,
+    struct Window {
+        window: winit::window::Window,
+        surface: skia_safe::Surface,
+        dr_context: skia_safe::gpu::DirectContext,
+        skia_context: glutin::context::PossiblyCurrentContext,
+        fb_info: skia_safe::gpu::gl::FramebufferInfo,
+        gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
         //draw_fn: DrawFn<Shared, T>,
         //key_fn: Option<KeyFn<Shared, T>>,
-    ) -> winit::window::WindowId {
-        let display_builder = glutin_winit::DisplayBuilder::new()
-            .with_window_attributes(Some(attr.with_visible(false)))
-            .with_preference(glutin_winit::ApiPreference::FallbackEgl);
-        let template = glutin::config::ConfigTemplateBuilder::new().with_alpha_size(8);
-        let (window, config) = display_builder
-            .build(self.event_loop, template, |mut config| {
-                config.next().unwrap()
-            })
-            .unwrap();
-        let window = window.unwrap();
-        let raw_handle = window.window_handle().unwrap();
-        let gl_display = config.display();
+        next_redraw: Option<Instant>,
+        redraw_policy: Redraw,
+        //focused: bool,
+    }
 
-        let context_attr = glutin::context::ContextAttributesBuilder::new()
-            .with_context_api(glutin::context::ContextApi::OpenGl(None)) // I just pick whatever version here, idk my laptop pretty old
-            .build(Some(raw_handle.into()));
-        let width = NonZeroU32::new(window.inner_size().width.max(1)).unwrap();
-        let height = NonZeroU32::new(window.inner_size().height.max(1)).unwrap();
-        let gl_attr =
-            glutin::surface::SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
-                .build(raw_handle.into(), width, height);
+    pub struct Canvas<'skip> {
+        on: &'skip Vec<(Mouse, State)>,
+        mouse_pos: &'skip skip::Vec2<f32>,
+        //key: &'skip Vec<skip::Key>,
+        canvas: &'skip skia_safe::Canvas,
+        paint: &'skip mut skia_safe::Paint,
+        fonts: &'skip mut Vec<skia_safe::Font>,
+        images: &'skip Vec<skia_safe::Image>,
+        window: &'skip mut winit::window::Window,
+        //text_cache: &'skip mut Vec<TextCache<'skip>>,
+        //cache_index: usize,
+        text_style: &'skip mut skia_safe::textlayout::TextStyle,
+        font_collection: &'skip skia_safe::textlayout::FontCollection,
+        paragrah_style: &'skip mut skia_safe::textlayout::ParagraphStyle,
+        window_dim: skip::Vec2<f32>,
+        p_pos: Vec2<f32>,
+        p_dim: Vec2<f32>,
+    }
 
-        // now this is where the fun stuff starts
-        let not_current = unsafe { gl_display.create_context(&config, &context_attr).unwrap() };
-        let gl_surface = unsafe { gl_display.create_window_surface(&config, &gl_attr).unwrap() };
+    impl<'a> skip::Renderer for Canvas<'a> {
+        type Paragraph = TextCache;
+        type Image = skia_safe::Image;
+        type Font = Font;
 
-        let context = not_current.make_current(&gl_surface).unwrap();
-        // We load opengl function pointers here
-        gl::load_with(|s| {
-            let cstr = CString::new(s).unwrap();
-            gl_display.get_proc_address(&cstr) as *const _
-        });
-
-        // basically just a bunch config for skia
-        let interface = skia_safe::gpu::gl::Interface::new_native().unwrap();
-        let mut gr_context =
-            skia_safe::gpu::ganesh::gl::direct_contexts::make_gl(interface, None).unwrap();
-        let fb_info = {
-            let mut fboid: gl::types::GLint = 0;
-            unsafe {
-                gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &mut fboid);
+        fn iter_mouse<F: FnMut(&(Mouse, State))>(&self, mut f: F) {
+            for key in self.on {
+                f(key)
             }
-            skia_safe::gpu::gl::FramebufferInfo {
-                fboid: fboid as u32,
-                format: skia_safe::gpu::gl::Format::RGBA8.into(),
-                protected: skia_safe::gpu::Protected::No, // you want access to the fb info y'know
-            }
-        };
-        let size = window.inner_size();
-        let backend_render_target = skia_safe::gpu::backend_render_targets::make_gl(
-            (size.width as i32, size.height as i32),
-            0,
-            8,
-            fb_info,
-        );
+        }
 
-        // now build the damn canvas finally
-        let surface = skia_safe::gpu::surfaces::wrap_backend_render_target(
-            &mut gr_context,
-            &backend_render_target,
-            skia_safe::gpu::SurfaceOrigin::BottomLeft,
-            skia_safe::ColorType::RGBA8888,
-            None,
-            None,
-        )
-        .unwrap();
-        let id = window.id();
-        self.windows.insert(
-            id.clone(),
-            Window {
-                window,
-                surface,
-                dr_context: gr_context,
-                skia_context: context,
+        fn render_paragraph(
+            &mut self,
+            text_w: &mut skip::TextW,
+            text: &str,
+            paragraph: &mut Option<Self::Paragraph>,
+            font: &Self::Font,
+            color: skip::Color,
+        ) {
+            match paragraph {
+                None => {}
+                Some(cache) => {}
+            }
+
+            if let Some(p) = paragraph {
+                if p.font != font.tf.unique_id() {}
+
+                if p.color != color {}
+
+                if p.width != self.p_dim.x {}
+
+                if p.size != font.font.size() {}
+            }
+        }
+
+        fn render_text(
+            &mut self,
+            text_w: &mut skip::TextW,
+            text: &str,
+            font: &Self::Font,
+            color: skip::Color,
+        ) {
+            self.text_style.set_font_size(text.size);
+            self.text_style.set_font_families(&[text.font]);
+            self.paragrah_style.set_text_style(self.text_style);
+            let prov = skia_safe::textlayout::TypefaceFontProvider::new();
+            //prov.register_typeface(typeface, alias);
+
+            self.font_collection.set_asset_font_manager(prov);
+            //prov.register_typeface(typeface, alias)
+            let mut builder = skia_safe::textlayout::ParagraphBuilder::new(
+                self.paragrah_style,
+                self.font_collection.clone(),
+            );
+            builder.add_text(text.text);
+            //self.font_collection.set_asset_font_manager(font_manager);
+            let paragraph = builder.build();
+
+            let size = Vec2::new(
+                paragraph.max_width() as f32,
+                paragraph.longest_line() as f32,
+            );
+        }
+        fn set_parent<Dim: Into<skip::Vec2<f32>>, Pos: Into<skip::Vec2<f32>>>(
+            &mut self,
+            dim: Dim,
+            pos: Pos,
+        ) {
+            self.p_pos = pos.into();
+            self.p_dim = dim.into();
+        }
+
+        fn get_parent(&self) -> (Vec2<f32>, Vec2<f32>) {
+            (
+                (self.p_dim.x, self.p_dim.y).into(),
+                (self.p_pos.x, self.p_pos.y).into(),
+            )
+        }
+
+        fn canvas_size(&mut self) -> skip::Vec2<f32> {
+            let size = self.window.inner_size();
+            (size.width as f32, size.height as f32).into()
+        }
+
+        fn render_div(&mut self, div: &skip::DivW, color: skip::Color, radius: f32) {
+            let right = div.pos.x + div.size.x;
+            let bottom = div.pos.y + div.size.y;
+
+            if right <= 0.0
+                || bottom <= 0.0
+                || div.pos.x >= self.window_dim.x
+                || div.pos.y >= self.window_dim.y
+            {
+                //println!("skipped!");
+                return;
+            }
+            //dbg!(div);
+            //println!("draw!");
+            self.paint.set_argb(color.a, color.r, color.g, color.b);
+            self.canvas.draw_round_rect(
+                skia_safe::Rect::from_xywh(div.pos.x, div.pos.y, div.size.x, div.size.y),
+                radius,
+                radius,
+                self.paint,
+            );
+        }
+        fn render_circle(&mut self, circle: &skip::CircleW, color: skip::Color) {
+            self.paint.set_argb(color.a, color.r, color.g, color.b);
+            self.canvas
+                .draw_circle((circle.pos.x, circle.pos.y), circle.radius, self.paint);
+        }
+
+        fn render_img(&mut self, img: &skip::DivW, tint: skip::Color, image_id: skip::ImageId) {
+            let right = img.pos.x + img.size.x;
+            let bottom = img.pos.y + img.size.y;
+
+            if right <= 0.0
+                || bottom <= 0.0
+                || img.pos.x >= self.window_dim.x
+                || img.pos.y >= self.window_dim.y
+            {
+                return;
+            }
+            match self.images.get(image_id) {
+                Some(image) => {
+                    self.paint.set_argb(tint.a, tint.r, tint.g, tint.b);
+                    self.canvas.draw_image_rect(
+                        image,
+                        None,
+                        skia_safe::Rect::from_xywh(img.pos.x, img.pos.y, img.size.x, img.size.y),
+                        self.paint,
+                    );
+                }
+                None => (),
+            }
+        }
+
+        fn start_clip(&mut self, dim: &Vec2<f32>, pos: &Vec2<f32>) {
+            self.canvas.save();
+            let rect = skia_safe::Rect::from_xywh(pos.x, pos.y, dim.x, dim.y);
+            let mut path = skia_safe::Path::rect(&rect, None);
+            self.canvas.clip_path(&path, None, Some(true));
+        }
+        fn end_clip(&mut self) {
+            self.canvas.restore();
+        }
+
+        fn mouse_pos(&mut self) -> skip::Vec2<f32> {
+            (self.mouse_pos).into()
+        }
+
+        fn change_cursor(&mut self, cursor: skip::Cursor) {
+            use winit::window::Cursor::*;
+            use winit::window::CursorIcon::*;
+            let cursor = match cursor {
+                skip::Cursor::Default => Icon(Default),
+                skip::Cursor::Pointer => Icon(Pointer),
+            };
+            self.window.set_cursor(cursor);
+        }
+    }
+
+    struct WinitRenderer<T: 'static, A: AppController<T>> {
+        windows: HashMap<winit::window::WindowId, Window>,
+        on: Vec<(Mouse, State)>,
+        //key: Vec<skip::Key>,
+        mouse_pos: skip::Vec2<f32>,
+        current_focus: winit::window::WindowId,
+        proxy: EventLoopProxy<T>,
+        app: A,
+        paint: skia_safe::Paint,
+        fonts: Vec<skia_safe::Font>,
+        font_mgr: skia_safe::FontMgr,
+        images: Vec<skia_safe::Image>,
+    }
+
+    pub struct Context<'skip> {
+        windows: &'skip mut HashMap<winit::window::WindowId, Window>,
+        event_loop: &'skip winit::event_loop::ActiveEventLoop,
+        fonts: &'skip mut Vec<skia_safe::Font>,
+        font_mgr: &'skip mut skia_safe::FontMgr,
+        images: &'skip mut Vec<skia_safe::Image>,
+    }
+
+    impl<'skip> Context<'skip> {
+        pub fn new_window(
+            &mut self,
+            attr: winit::window::WindowAttributes,
+            //draw_fn: DrawFn<Shared, T>,
+            //key_fn: Option<KeyFn<Shared, T>>,
+        ) -> winit::window::WindowId {
+            let display_builder = glutin_winit::DisplayBuilder::new()
+                .with_window_attributes(Some(attr.with_visible(false)))
+                .with_preference(glutin_winit::ApiPreference::FallbackEgl);
+            let template = glutin::config::ConfigTemplateBuilder::new().with_alpha_size(8);
+            let (window, config) = display_builder
+                .build(self.event_loop, template, |mut config| {
+                    config.next().unwrap()
+                })
+                .unwrap();
+            let window = window.unwrap();
+            let raw_handle = window.window_handle().unwrap();
+            let gl_display = config.display();
+
+            let context_attr = glutin::context::ContextAttributesBuilder::new()
+                .with_context_api(glutin::context::ContextApi::OpenGl(None)) // I just pick whatever version here, idk my laptop pretty old
+                .build(Some(raw_handle.into()));
+            let width = NonZeroU32::new(window.inner_size().width.max(1)).unwrap();
+            let height = NonZeroU32::new(window.inner_size().height.max(1)).unwrap();
+            let gl_attr =
+                glutin::surface::SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
+                    .build(raw_handle.into(), width, height);
+
+            // now this is where the fun stuff starts
+            let not_current = unsafe { gl_display.create_context(&config, &context_attr).unwrap() };
+            let gl_surface =
+                unsafe { gl_display.create_window_surface(&config, &gl_attr).unwrap() };
+
+            let context = not_current.make_current(&gl_surface).unwrap();
+            // We load opengl function pointers here
+            gl::load_with(|s| {
+                let cstr = CString::new(s).unwrap();
+                gl_display.get_proc_address(&cstr) as *const _
+            });
+
+            // basically just a bunch config for skia
+            let interface = skia_safe::gpu::gl::Interface::new_native().unwrap();
+            let mut gr_context =
+                skia_safe::gpu::ganesh::gl::direct_contexts::make_gl(interface, None).unwrap();
+            let fb_info = {
+                let mut fboid: gl::types::GLint = 0;
+                unsafe {
+                    gl::GetIntegerv(gl::FRAMEBUFFER_BINDING, &mut fboid);
+                }
+                skia_safe::gpu::gl::FramebufferInfo {
+                    fboid: fboid as u32,
+                    format: skia_safe::gpu::gl::Format::RGBA8.into(),
+                    protected: skia_safe::gpu::Protected::No, // you want access to the fb info y'know
+                }
+            };
+            let size = window.inner_size();
+            let backend_render_target = skia_safe::gpu::backend_render_targets::make_gl(
+                (size.width as i32, size.height as i32),
+                0,
+                8,
                 fb_info,
-                gl_surface,
-                //focused: false,
-                //draw_fn,
-                //key_fn,
-                next_redraw: None,
-                redraw_policy: Redraw::FocusOnly,
-            },
-        );
-        id
-    }
+            );
 
-    pub fn destroy(&mut self, id: &winit::window::WindowId) {
-        self.windows.remove(id);
-    }
-
-    pub fn new_font(&mut self, data: &[u8]) -> Result<crate::Font, ()> {
-        let tf = self.font_mgr.new_from_data(data, None);
-        match tf {
-            Some(tf) => {
-                let font = skia_safe::Font::from_typeface(&tf, None);
-                Ok(Font { font, tf })
-            }
-            None => Err(()),
+            // now build the damn canvas finally
+            let surface = skia_safe::gpu::surfaces::wrap_backend_render_target(
+                &mut gr_context,
+                &backend_render_target,
+                skia_safe::gpu::SurfaceOrigin::BottomLeft,
+                skia_safe::ColorType::RGBA8888,
+                None,
+                None,
+            )
+            .unwrap();
+            let id = window.id();
+            self.windows.insert(
+                id.clone(),
+                Window {
+                    window,
+                    surface,
+                    dr_context: gr_context,
+                    skia_context: context,
+                    fb_info,
+                    gl_surface,
+                    //focused: false,
+                    //draw_fn,
+                    //key_fn,
+                    next_redraw: None,
+                    redraw_policy: Redraw::FocusOnly,
+                },
+            );
+            id
         }
-    }
 
-    pub fn new_image(
-        &mut self,
-        data: &[u8],
-        //img_id: Option<skip::ImageId>,
-    ) -> Option<skia_safe::Image> {
-        let data = skia_safe::Data::new_copy(data);
-        skia_safe::Image::from_encoded(data)
-    }
-
-    pub fn set_visible(&mut self, id: &winit::window::WindowId, visible: bool) {
-        if let Some(window) = self.windows.get_mut(id) {
-            window.window.set_visible(visible);
+        pub fn destroy(&mut self, id: &winit::window::WindowId) {
+            self.windows.remove(id);
         }
-    }
 
-    pub fn request_redraw(&mut self, id: &winit::window::WindowId) {
-        if let Some(window) = self.windows.get_mut(id) {
-            window.window.request_redraw();
-        }
-    }
-
-    pub fn get_window_size(&mut self, id: &winit::window::WindowId) -> Option<skip::Vec2<f32>> {
-        if let Some(window) = self.windows.get(id) {
-            let size = window.window.inner_size();
-            return Some((size.width as f32, size.height as f32).into());
-        }
-        None
-    }
-
-    /// Just, end the app
-    pub fn exit(&mut self) {
-        self.event_loop.exit();
-    }
-}
-
-impl<T: 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
-    for WinitRenderer<T, A>
-{
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.app.bootstrap(
-            Context {
-                windows: &mut self.windows,
-                event_loop,
-                fonts: &mut self.fonts,
-                font_mgr: &mut self.font_mgr,
-                images: &mut self.images,
-            },
-            self.proxy.clone(),
-        );
-    }
-
-    fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: T) {
-        self.app.on_user_event(
-            event,
-            Context {
-                windows: &mut self.windows,
-                event_loop,
-                fonts: &mut self.fonts,
-                font_mgr: &mut self.font_mgr,
-                images: &mut self.images,
-            },
-        );
-    }
-
-    fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let now = Instant::now();
-
-        let mut next: Option<Instant> = None;
-
-        for window in self.windows.values_mut() {
-            if let Some(deadline) = window.next_redraw {
-                if deadline <= now {
-                    window.window.request_redraw();
-
-                    // schedule the next frame
-                    window.next_redraw = Some(deadline + Duration::from_millis(16));
+        pub fn new_font(&mut self, data: &[u8]) -> Result<crate::Font, ()> {
+            let tf = self.font_mgr.new_from_data(data, None);
+            match tf {
+                Some(tf) => {
+                    let font = skia_safe::Font::from_typeface(&tf, None);
+                    Ok(Font { font, tf })
                 }
-
-                next = Some(match next {
-                    Some(old) => old.min(window.next_redraw.unwrap()),
-                    None => window.next_redraw.unwrap(),
-                });
+                None => Err(()),
             }
         }
 
-        match next {
-            Some(deadline) => {
-                event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(deadline));
-            }
-            None => {
-                event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+        pub fn new_image(
+            &mut self,
+            data: &[u8],
+            //img_id: Option<skip::ImageId>,
+        ) -> Option<skia_safe::Image> {
+            let data = skia_safe::Data::new_copy(data);
+            skia_safe::Image::from_encoded(data)
+        }
+
+        pub fn set_visible(&mut self, id: &winit::window::WindowId, visible: bool) {
+            if let Some(window) = self.windows.get_mut(id) {
+                window.window.set_visible(visible);
             }
         }
-        //todo!("Create the timer here!!")
+
+        pub fn request_redraw(&mut self, id: &winit::window::WindowId) {
+            if let Some(window) = self.windows.get_mut(id) {
+                window.window.request_redraw();
+            }
+        }
+
+        pub fn get_window_size(&mut self, id: &winit::window::WindowId) -> Option<skip::Vec2<f32>> {
+            if let Some(window) = self.windows.get(id) {
+                let size = window.window.inner_size();
+                return Some((size.width as f32, size.height as f32).into());
+            }
+            None
+        }
+
+        /// Just, end the app
+        pub fn exit(&mut self) {
+            self.event_loop.exit();
+        }
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
-        event: winit::event::WindowEvent,
-    ) {
-        match self.windows.get_mut(&window_id) {
-            None => (),
-            Some(window) => match event {
-                winit::event::WindowEvent::KeyboardInput { event, .. } => {
-                    if window_id != self.current_focus {
-                        return;
+    impl<T: 'static, A: AppController<T>> winit::application::ApplicationHandler<T>
+        for WinitRenderer<T, A>
+    {
+        fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+            self.app.bootstrap(
+                Context {
+                    windows: &mut self.windows,
+                    event_loop,
+                    fonts: &mut self.fonts,
+                    font_mgr: &mut self.font_mgr,
+                    images: &mut self.images,
+                },
+                self.proxy.clone(),
+            );
+        }
+
+        fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: T) {
+            self.app.on_user_event(
+                event,
+                Context {
+                    windows: &mut self.windows,
+                    event_loop,
+                    fonts: &mut self.fonts,
+                    font_mgr: &mut self.font_mgr,
+                    images: &mut self.images,
+                },
+            );
+        }
+
+        fn about_to_wait(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+            let now = Instant::now();
+
+            let mut next: Option<Instant> = None;
+
+            for window in self.windows.values_mut() {
+                if let Some(deadline) = window.next_redraw {
+                    if deadline <= now {
+                        window.window.request_redraw();
+
+                        // schedule the next frame
+                        window.next_redraw = Some(deadline + Duration::from_millis(16));
                     }
-                    //if let Some(key_fn) = &window.key_fn {
-                    let state = match event.state {
-                        winit::event::ElementState::Pressed => skip::State::Pressed,
-                        winit::event::ElementState::Released => skip::State::Released,
-                    };
-                    let key = match event.physical_key {
-                        winit::keyboard::PhysicalKey::Code(c) => {
-                            let key = keycode_translate(c);
-                            (key, state)
-                        }
-                        winit::keyboard::PhysicalKey::Unidentified(_) => {
-                            (skip::Key::Unknown, state)
-                        }
-                    };
-                    self.app.on_key(window_id, key);
-                    //(key_fn.0)(self.app.share_resource(), key, &self.proxy);
-                    //}
+
+                    next = Some(match next {
+                        Some(old) => old.min(window.next_redraw.unwrap()),
+                        None => window.next_redraw.unwrap(),
+                    });
                 }
-                winit::event::WindowEvent::MouseInput { state, button, .. } => {
-                    let button = match button {
-                        winit::event::MouseButton::Left => skip::Mouse::Left,
-                        winit::event::MouseButton::Right => skip::Mouse::Right,
-                        winit::event::MouseButton::Middle => skip::Mouse::Middle,
-                        _ => skip::Mouse::Unknown,
-                    };
-                    let state = match state {
-                        winit::event::ElementState::Pressed => skip::State::Pressed,
-                        winit::event::ElementState::Released => skip::State::Released,
-                    };
-                    self.on.push((button, state));
+            }
+
+            match next {
+                Some(deadline) => {
+                    event_loop
+                        .set_control_flow(winit::event_loop::ControlFlow::WaitUntil(deadline));
                 }
-                winit::event::WindowEvent::RedrawRequested => {
-                    let redraw = match window.redraw_policy {
-                        Redraw::FocusOnly => {
-                            if self.current_focus == window_id {
-                                true
-                            } else {
-                                false
+                None => {
+                    event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+                }
+            }
+            //todo!("Create the timer here!!")
+        }
+
+        fn window_event(
+            &mut self,
+            event_loop: &winit::event_loop::ActiveEventLoop,
+            window_id: winit::window::WindowId,
+            event: winit::event::WindowEvent,
+        ) {
+            match self.windows.get_mut(&window_id) {
+                None => (),
+                Some(window) => match event {
+                    winit::event::WindowEvent::KeyboardInput { event, .. } => {
+                        if window_id != self.current_focus {
+                            return;
+                        }
+                        //if let Some(key_fn) = &window.key_fn {
+                        let state = match event.state {
+                            winit::event::ElementState::Pressed => skip::State::Pressed,
+                            winit::event::ElementState::Released => skip::State::Released,
+                        };
+                        let key = match event.physical_key {
+                            winit::keyboard::PhysicalKey::Code(c) => {
+                                let key = keycode_translate(c);
+                                (key, state)
                             }
+                            winit::keyboard::PhysicalKey::Unidentified(_) => {
+                                (skip::Key::Unknown, state)
+                            }
+                        };
+                        self.app.on_key(window_id, key);
+                        //(key_fn.0)(self.app.share_resource(), key, &self.proxy);
+                        //}
+                    }
+                    winit::event::WindowEvent::MouseInput { state, button, .. } => {
+                        let button = match button {
+                            winit::event::MouseButton::Left => skip::Mouse::Left,
+                            winit::event::MouseButton::Right => skip::Mouse::Right,
+                            winit::event::MouseButton::Middle => skip::Mouse::Middle,
+                            _ => skip::Mouse::Unknown,
+                        };
+                        let state = match state {
+                            winit::event::ElementState::Pressed => skip::State::Pressed,
+                            winit::event::ElementState::Released => skip::State::Released,
+                        };
+                        self.on.push((button, state));
+                    }
+                    winit::event::WindowEvent::RedrawRequested => {
+                        let redraw = match window.redraw_policy {
+                            Redraw::FocusOnly => {
+                                if self.current_focus == window_id {
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            Redraw::Always => true,
+                        };
+                        if !redraw {
+                            return;
                         }
-                        Redraw::Always => true,
-                    };
-                    if !redraw {
-                        return;
-                    }
-                    let canvas = window.surface.canvas();
-                    let window_dim = window.window.inner_size();
-                    canvas.clear(skia_safe::Color::WHITE);
-                    //window.window.set_cursor(winit::window::Cursor::Icon(winit::window::CursorIcon::Default));
-                    let duration = self.app.on_draw(
-                        window_id,
-                        skip::Horizontal::new(Canvas {
-                            on: &self.on,
-                            mouse_pos: &self.mouse_pos,
-                            canvas,
-                            paint: &mut self.paint,
-                            fonts: &mut self.fonts,
-                            images: &self.images,
-                            window: &mut window.window,
-                            window_dim: (window_dim.width as f32, window_dim.height as f32).into(),
-                            p_pos: ().into(),
-                            p_dim: ().into(),
-                        }),
-                    );
+                        let canvas = window.surface.canvas();
+                        let window_dim = window.window.inner_size();
+                        canvas.clear(skia_safe::Color::WHITE);
+                        //window.window.set_cursor(winit::window::Cursor::Icon(winit::window::CursorIcon::Default));
+                        let duration = self.app.on_draw(
+                            window_id,
+                            skip::Horizontal::new(Canvas {
+                                on: &self.on,
+                                mouse_pos: &self.mouse_pos,
+                                canvas,
+                                paint: &mut self.paint,
+                                fonts: &mut self.fonts,
+                                images: &self.images,
+                                window: &mut window.window,
+                                window_dim: (window_dim.width as f32, window_dim.height as f32)
+                                    .into(),
+                                p_pos: ().into(),
+                                p_dim: ().into(),
+                            }),
+                        );
 
-                    window.dr_context.flush_and_submit();
-                    //window.dr_context.flush_and_submit_surface(&mut window.surface, None);
-                    window
-                        .gl_surface
-                        .swap_buffers(&window.skia_context)
-                        .unwrap();
-                    self.on.clear();
-                    //                    self.key.clear();
-                    if let Some(d) = duration {
-                        window.next_redraw = Some(Instant::now() + d);
+                        window.dr_context.flush_and_submit();
+                        //window.dr_context.flush_and_submit_surface(&mut window.surface, None);
+                        window
+                            .gl_surface
+                            .swap_buffers(&window.skia_context)
+                            .unwrap();
+                        self.on.clear();
+                        //                    self.key.clear();
+                        if let Some(d) = duration {
+                            window.next_redraw = Some(Instant::now() + d);
+                        }
                     }
-                }
-                winit::event::WindowEvent::Resized(size) => {
-                    let backend_render_target = skia_safe::gpu::backend_render_targets::make_gl(
-                        (size.width as i32, size.height as i32),
-                        0,
-                        8,
-                        window.fb_info,
-                    );
-                    //window.window.set_cursor(cursor);
-                    window.surface = skia_safe::gpu::surfaces::wrap_backend_render_target(
-                        &mut window.dr_context,
-                        &backend_render_target,
-                        skia_safe::gpu::SurfaceOrigin::BottomLeft,
-                        skia_safe::ColorType::RGBA8888,
-                        None,
-                        None,
-                    )
-                    .unwrap();
-                }
-                winit::event::WindowEvent::CloseRequested => {
-                    self.windows.remove(&window_id);
-                }
-                winit::event::WindowEvent::Focused(_) => {
-                    self.current_focus = window_id;
-                }
-                winit::event::WindowEvent::CursorMoved { position, .. } => {
-                    let logical = position.to_logical::<f32>(window.window.scale_factor());
-                    self.mouse_pos = (logical.x, logical.y as f32).into();
-                    //                    dbg!(logical);
-                }
-                _ => (),
-            },
+                    winit::event::WindowEvent::Resized(size) => {
+                        let backend_render_target = skia_safe::gpu::backend_render_targets::make_gl(
+                            (size.width as i32, size.height as i32),
+                            0,
+                            8,
+                            window.fb_info,
+                        );
+                        //window.window.set_cursor(cursor);
+                        window.surface = skia_safe::gpu::surfaces::wrap_backend_render_target(
+                            &mut window.dr_context,
+                            &backend_render_target,
+                            skia_safe::gpu::SurfaceOrigin::BottomLeft,
+                            skia_safe::ColorType::RGBA8888,
+                            None,
+                            None,
+                        )
+                        .unwrap();
+                    }
+                    winit::event::WindowEvent::CloseRequested => {
+                        self.windows.remove(&window_id);
+                    }
+                    winit::event::WindowEvent::Focused(_) => {
+                        self.current_focus = window_id;
+                    }
+                    winit::event::WindowEvent::CursorMoved { position, .. } => {
+                        let logical = position.to_logical::<f32>(window.window.scale_factor());
+                        self.mouse_pos = (logical.x, logical.y as f32).into();
+                        //                    dbg!(logical);
+                    }
+                    _ => (),
+                },
+            }
         }
     }
-}
 }
 fn keycode_translate(key: winit::keyboard::KeyCode) -> skip::Key {
     use skip::Key;
