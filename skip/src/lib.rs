@@ -4,7 +4,7 @@ mod builtin;
 
 use std::marker::PhantomData;
 
-use crate::{builtin::Widget, child::Child, io::{Mouse, State}, op::Operation, size::Size};
+use crate::{builtin::Widget, child::{Child, Horizontal, Manual, Vertical}, io::{Mouse, State}, op::Operation, size::Size};
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Color {
     pub r: u8,
@@ -230,7 +230,7 @@ pub mod child {
     impl Child for () {}
 
     #[derive(Default, Debug)]
-    pub struct Static;
+    pub struct Manual;
 
     #[derive(Default)]
     pub struct Vertical {
@@ -244,7 +244,7 @@ pub mod child {
         gap: f32,
     }
 
-    impl Child for Static {
+    impl Child for Manual {
         fn layout<'skip, W: Widget<'skip, R>, WO: Widget<'skip, R>, R: Renderer>(
             &mut self,
             renderer: R,
@@ -444,9 +444,84 @@ impl<'skip, R: Renderer> Circle<R> {
     }
 }
 
-impl<'skip, R: Renderer, L: Child> Div<R, L> {
+impl<R: Renderer> Div<R, Vertical> {
     #[inline]
-    pub fn proc<P: Proc<'skip, R, Widget = Self>>(self, proc: P, arg: P::Arg) -> Self {
+    pub fn child<'skip, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+        mut self,
+        //arg: impl Into<W::Constructor>,
+        f: impl FnOnce(W) -> WO,
+    ) -> Self {
+        self.renderer
+            .set_parent(&self.widget.size, &self.widget.pos);
+        self.renderer = self.layout.layout(self.renderer, &self.widget.pos, f);
+        self
+    }
+
+    #[inline]
+    pub fn iter<'skip, Iter: Iterator, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+        mut self,
+        //arg: impl Into<W::Constructor>,
+        items: (Iter, impl COption<Data = usize>),
+        f: impl FnMut(W, Iter::Item) -> WO,
+    ) -> Self {
+        self.renderer = self.layout.iter(self.renderer, &self.widget.pos, items, f);
+        self
+    }
+}
+
+impl<R: Renderer> Div<R, Horizontal> {
+    #[inline]
+    pub fn child<'skip, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+        mut self,
+        //arg: impl Into<W::Constructor>,
+        f: impl FnOnce(W) -> WO,
+    ) -> Self {
+        self.renderer
+            .set_parent(&self.widget.size, &self.widget.pos);
+        self.renderer = self.layout.layout(self.renderer, &self.widget.pos, f);
+        self
+    }
+
+    #[inline]
+    pub fn iter<'skip, Iter: Iterator, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+        mut self,
+        //arg: impl Into<W::Constructor>,
+        items: (Iter, impl COption<Data = usize>),
+        f: impl FnMut(W, Iter::Item) -> WO,
+    ) -> Self {
+        self.renderer = self.layout.iter(self.renderer, &self.widget.pos, items, f);
+        self
+    }
+}
+
+impl<R: Renderer> Div<R, Manual> {
+        #[inline]
+    pub fn child<'skip, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+        mut self,
+        //arg: impl Into<W::Constructor>,
+        f: impl FnOnce(W) -> WO,
+    ) -> Self {
+        self.renderer
+            .set_parent(&self.widget.size, &self.widget.pos);
+        self.renderer = self.layout.layout(self.renderer, &self.widget.pos, f);
+        self
+    }
+
+    #[inline]
+    pub fn iter<'skip, Iter: Iterator, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
+        mut self,
+        //arg: impl Into<W::Constructor>,
+        items: (Iter, impl COption<Data = usize>),
+        f: impl FnMut(W, Iter::Item) -> WO,
+    ) -> Self {
+        self.renderer = self.layout.iter(self.renderer, &self.widget.pos, items, f);
+        self
+    }
+}
+
+impl<R: Renderer, L: Child> Div<R, L> {
+    #[inline]
+    pub fn proc<'skip, P: Proc<'skip, R, Widget = Self>>(self, proc: P, arg: P::Arg) -> Self {
         proc.consume(self, arg)
     }
 
@@ -458,13 +533,13 @@ impl<'skip, R: Renderer, L: Child> Div<R, L> {
     }
 
     #[inline]
-    pub fn render<Style: style::Style<'skip, R>>(mut self, arg: Style::Arg) -> Self {
+    pub fn render<'skip, Style: style::Style<'skip, R>>(mut self, arg: Style::Arg) -> Self {
         Style::render(&self.widget, &mut self.renderer, arg);
         self
     }
 
     #[inline]
-    pub fn on<On: on::On<'skip, R, Self>>(
+    pub fn on<'skip, On: on::On<'skip, R, Self>>(
         mut self,
         f: impl FnMut(On::Arg) -> On::FnOut,
     ) -> Self {
@@ -477,29 +552,6 @@ impl<'skip, R: Renderer, L: Child> Div<R, L> {
             return self;
         }
         On::call(f, self, mouse_pos)
-    }
-
-    #[inline]
-    pub fn child<W: Widget<'skip, R>, WO: Widget<'skip, R>>(
-        mut self,
-        //arg: impl Into<W::Constructor>,
-        f: impl FnOnce(W) -> WO,
-    ) -> Self {
-        self.renderer
-            .set_parent(&self.widget.size, &self.widget.pos);
-        self.renderer = self.layout.layout(self.renderer, &self.widget.pos, f);
-        self
-    }
-
-    #[inline]
-    pub fn iter<Iter: Iterator, W: Widget<'skip, R>, WO: Widget<'skip, R>>(
-        mut self,
-        //arg: impl Into<W::Constructor>,
-        items: (Iter, impl COption<Data = usize>),
-        f: impl FnMut(W, Iter::Item) -> WO,
-    ) -> Self {
-        self.renderer = self.layout.iter(self.renderer, &self.widget.pos, items, f);
-        self
     }
 
     #[inline]
@@ -659,9 +711,9 @@ pub mod op {
         }
     }
 
-    pub struct Time;
+    pub struct Mul;
 
-    impl Operation for Time {
+    impl Operation for Mul {
         type Item = Vec2<f32>;
 
         fn apply(initial_item: &mut Self::Item, diff: Self::Item) {
