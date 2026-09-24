@@ -1,5 +1,6 @@
 use crate::{
-    Color, Div, Horizontal, Inc, Inherit, Linear, Overflow, Plain, Proc, Renderer, Set, Text, Vec2,
+    CNone, Color, Div, Empty, Inc, Linear, Plain, Proc, Renderer, Set, Text, Vec2,
+    child::Horizontal, size::Inherit,
 };
 
 pub struct Border<Color: Into<crate::Color>, Thickness: Into<Vec2<f32>>, Offset: Into<Vec2<f32>>>(
@@ -59,14 +60,19 @@ impl<'skip, R: Renderer + 'skip> Proc<'skip, R> for &'skip mut TextBox {
     type Arg = (&'skip R::Font, f32, Color);
     fn consume(self, widget: Self::Widget, (font, size, color): Self::Arg) -> Self::Widget {
         widget
-            .child(font,|text: Text<Linear, _>| {
-                text.content((&self.text[0..self.insert_idx]))
+            .iter(
+                //(10.0, 10.0),
+                ([100, 100].iter(), CNone::new()),
+                |div: Div<_>, item| div.child(|text: Text<_>| text.content::<Empty>(())),
+            )
+            .child(|text: Text<_>| {
+                text.content::<Linear>(Some((&self.text[0..self.insert_idx], font)))
                     //.size(size)
                     .render(&color)
             })
-            .child((1.0, size),|cursor: Div<_>| cursor.render::<Plain>((color, 0.0)))
-            .child(font,|text: Text<Linear, _>| {
-                text.content(&self.text[self.insert_idx..self.text.len()])
+            .child(|cursor: Div<_>| cursor.render::<Plain>((color, 0.0)))
+            .child(|text: Text<_>| {
+                text.content::<Linear>(Some((&self.text[self.insert_idx..self.text.len()], font)))
                     //.size(size)
                     .render(&color)
             })

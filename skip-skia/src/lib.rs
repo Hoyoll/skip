@@ -185,7 +185,6 @@ pub struct Font {
 mod deprecated {
     use skip::Vec2;
 
-
     pub trait AppController<T> {
         fn bootstrap<'skip>(&mut self, context: Context<'skip>, event: EventLoopProxy<T>);
         fn on_user_event<'skip>(&mut self, user_event: T, context: Context<'skip>) {}
